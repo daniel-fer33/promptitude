@@ -19,15 +19,21 @@ def find_version(*file_paths):
 
 
 setup(
-    name="guidance",
-    version=find_version("guidance", "__init__.py"),
-    url="https://github.com/slundberg/guidance",
-    author="Scott Lundberg and Marco Tulio Ribeiro",
-    author_email="scott.lundberg@microsoft.com",
-    description="A guidance language for controlling large language models.",
-    long_description="Guidance enables you to control modern language models more effectively and efficiently than traditional prompting or chaining. Guidance programs allow you to interleave generation, prompting, and logical control into a single continuous flow matching how the language model actually processes the text.",
+    name="promptitude",
+    version=find_version("promptitude", "__init__.py"),
+    url="https://github.com/daniel-33f/promptitude",
+    author="Daniel Fernandez",
+    author_email="daniel-fernandez@cookpad.com",
+    description="A flexible prompting language framework for large language models based on Guidance",
+    long_description="Promptitude is a powerful and flexible prompting language framework designed to simplify and "
+                     "enhance interactions with large language models (LLMs). It allows you to create dynamic, "
+                     "template-driven prompts that combine text, logical controls, and variable substitutions, "
+                     "providing fine-grained control over LLM outputs. Promptitude offers an intuitive approach to "
+                     "prompt engineering, particularly suited for rapid prototyping and iterative development of LLM "
+                     "applications. With Promptitude, you can achieve more efficient and effective prompting compared "
+                     "to traditional methods, making it an ideal tool for developers working with LLMs.",
     packages=find_packages(exclude=["user_studies", "notebooks", "client"]),
-    package_data={"guidance": ["resources/*"]},
+    package_data={"promptitude": ["resources/*"]},
     install_requires=[
         "diskcache",
         "gptcache",
