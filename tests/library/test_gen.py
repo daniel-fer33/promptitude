@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 import pytest
 from ..utils import get_llm
 

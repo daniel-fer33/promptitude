@@ -1,5 +1,5 @@
 import pytest
-import guidance
+from promptitude import guidance
 from ..utils import get_llm
 
 @pytest.mark.parametrize("llm", ["transformers:gpt2", "transformers:facebook/opt-350m"])

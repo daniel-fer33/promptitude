@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 
 def test_await():
     """ Test the behavior of `await`.

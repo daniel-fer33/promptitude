@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 import pytest
 
 opanai_model_cache = {}

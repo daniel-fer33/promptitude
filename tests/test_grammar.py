@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 
 def test_variable_interpolation():
     """ Test variable interpolation in prompt

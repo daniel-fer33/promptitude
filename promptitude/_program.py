@@ -14,7 +14,7 @@ import nest_asyncio
 # from .llms import _openai
 from . import _utils
 from ._program_executor import ProgramExecutor
-from . import commands
+from .guidance import commands
 import promptitude as guidance
 log = logging.getLogger(__name__)
 

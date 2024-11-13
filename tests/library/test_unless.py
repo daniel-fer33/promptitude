@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 import pytest
 
 @pytest.mark.parametrize("flag, expected_output", [
