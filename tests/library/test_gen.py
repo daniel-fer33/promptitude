@@ -141,3 +141,23 @@ def test_gen_stream(llm):
     prompt = guidance("Hello my name is{{gen 'name' max_tokens=10 stream=True}}", llm=llm2)
     out = prompt()
     assert len(out["name"]) > 1
+
+
+@pytest.mark.parametrize("llm", ["openai:gpt-4o-mini", ])
+def test_logprob(llm):
+    guidance.llm = get_llm(llm, caching=False)
+    program = guidance('''
+    {{#user~}}
+    Is the following sentence offensive? Please answer with a single word, either "Yes", "No", or "Maybe".
+    Sentence: {{example}}
+    Answer:
+    {{~/user}}
+
+    {{#assistant~}}
+    {{gen "answer" logprobs=True}}}}
+    {{~/assistant}}
+    ''')
+    executed_program = program(example='I hate tacos')
+    logprobs = executed_program['answer_logprobs']
+    assert 'No' in logprobs
+    assert logprobs['No'] < 0

@@ -127,6 +127,8 @@ def add_text_to_chat_mode(chat_mode):
         chat_mode = chat_mode.model_dump()
         for c in chat_mode['choices']:
             c['text'] = c['message']['content']
+            if 'logprobs' in c:
+                c['logprobs']['top_logprobs'] = {s1['token']: s1['logprob'] for s1 in c['logprobs']['content']}
         return chat_mode
 
 
@@ -393,7 +395,6 @@ class OpenAI(LLM):
             kwargs['messages'] = prompt_to_messages(kwargs['prompt'])
             del kwargs['prompt']
             del kwargs['echo']
-            del kwargs['logprobs']
             # print(kwargs)
             out = await client.chat.completions.create(**kwargs)
             out = add_text_to_chat_mode(out)
@@ -451,7 +452,6 @@ class OpenAI(LLM):
             data['messages'] = prompt_to_messages(data['prompt'])
             del data['prompt']
             del data['echo']
-            del data['logprobs']
 
         # Send a POST request and get the response
         # An exception for timeout is raised if the server has not issued a response for 10 seconds
