@@ -15,7 +15,7 @@ import nest_asyncio
 from . import _utils
 from ._program_executor import ProgramExecutor
 from .guidance import commands
-import promptitude as guidance
+from promptitude import guidance
 log = logging.getLogger(__name__)
 
 # load the javascript client code
