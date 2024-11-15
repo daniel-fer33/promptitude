@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 
 def test_set():
     """ Test the behavior of `set`.

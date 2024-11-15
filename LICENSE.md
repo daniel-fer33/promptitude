@@ -1,6 +1,14 @@
+# Promptitude License Information
+
+Promptitude is a derivative work based on "Guidance-AI," with additional contributions by the Promptitude team.
+
+---
+
 MIT License
 
 Copyright (c) Guidance-AI Contributors
+
+Copyright (c) 2024 Promptitude Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 
 def test_if():
     """ Test the behavior of `if`.

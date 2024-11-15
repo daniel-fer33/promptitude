@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 
 def test_less():
     """ Test the behavior of `less`.

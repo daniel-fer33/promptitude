@@ -163,7 +163,7 @@ async def gen(name=None, stop=None, stop_regex=None, save_stop_text=False, max_t
     if n == 1:
         generated_value = prefix
         variable_stack["@raw_prefix"] += prefix
-        logprobs_out = []
+        logprobs_out = {}
         if not isinstance(gen_obj, (types.AsyncGeneratorType, types.GeneratorType, list, tuple)):
             gen_obj = [gen_obj]
         if not isinstance(gen_obj, types.AsyncGeneratorType):
@@ -172,7 +172,7 @@ async def gen(name=None, stop=None, stop_regex=None, save_stop_text=False, max_t
             variable_stack[name] = variable_stack.get(name, [])
             variable_stack[name].append("")
             list_ind = len(variable_stack[name])-1
-            if logprobs is not None:
+            if logprobs:
                 variable_stack[name+"_logprobs"] = variable_stack.get(name+"_logprobs", [])
                 variable_stack[name+"_logprobs"].append([])
                 assert len(len(variable_stack[name])) == len(len(variable_stack[name+"_logprobs"]))
@@ -186,15 +186,15 @@ async def gen(name=None, stop=None, stop_regex=None, save_stop_text=False, max_t
             new_text = resp["choices"][0].get("text", "")
             generated_value += new_text
             variable_stack["@raw_prefix"] += new_text
-            if logprobs is not None:
-                logprobs_out.extend(resp["choices"][0]["logprobs"]["top_logprobs"])
+            if logprobs:
+                logprobs_out.update(resp["choices"][0]["logprobs"]["top_logprobs"])
             if list_append:
                 variable_stack[name][list_ind] = generated_value
-                if logprobs is not None:
+                if logprobs:
                     variable_stack[name+"_logprobs"][list_ind] = logprobs_out
             elif name is not None:
                 variable_stack[name] = generated_value
-                if logprobs is not None:
+                if logprobs:
                     variable_stack[name+"_logprobs"] = logprobs_out
         
         # save the final stopping text if requested
@@ -227,12 +227,12 @@ async def gen(name=None, stop=None, stop_regex=None, save_stop_text=False, max_t
         if list_append:
             value_list = variable_stack.get(name, [])
             value_list.append(generated_values)
-            if logprobs is not None:
+            if logprobs:
                 logprobs_list = variable_stack.get(name+"_logprobs", [])
                 logprobs_list.append([choice["logprobs"]["top_logprobs"] for choice in gen_obj["choices"]])
         elif name is not None:
             variable_stack[name] = generated_values
-            if logprobs is not None:
+            if logprobs:
                 variable_stack[name+"_logprobs"] = [choice["logprobs"]["top_logprobs"] for choice in gen_obj["choices"]]
 
         if not hidden:

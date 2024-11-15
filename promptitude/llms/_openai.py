@@ -108,6 +108,10 @@ async def add_text_to_chat_mode_generator(chat_mode):
                     else:
                         c['text'] = val
 
+                if 'logprobs' in c and c['logprobs'] is not None:
+                    if 'top_logprobs' not in c['logprobs']:
+                        c['logprobs']['top_logprobs'] = {}  # TODO: This probably has to be a list
+                    c['logprobs']['top_logprobs'].update({s1['token']: s1['logprob'] for s1 in c['logprobs']['content']})
                 if not found_content and not in_function_call:
                     break  # the role markers are outside the generation in chat mode right now TODO: consider how this changes for uncontrained generation
             else:
@@ -127,6 +131,8 @@ def add_text_to_chat_mode(chat_mode):
         chat_mode = chat_mode.model_dump()
         for c in chat_mode['choices']:
             c['text'] = c['message']['content']
+            if 'logprobs' in c and c['logprobs'] is not None:
+                c['logprobs']['top_logprobs'] = {s1['token']: s1['logprob'] for s1 in c['logprobs']['content']}
         return chat_mode
 
 
@@ -393,7 +399,6 @@ class OpenAI(LLM):
             kwargs['messages'] = prompt_to_messages(kwargs['prompt'])
             del kwargs['prompt']
             del kwargs['echo']
-            del kwargs['logprobs']
             # print(kwargs)
             out = await client.chat.completions.create(**kwargs)
             out = add_text_to_chat_mode(out)
@@ -451,7 +456,6 @@ class OpenAI(LLM):
             data['messages'] = prompt_to_messages(data['prompt'])
             del data['prompt']
             del data['echo']
-            del data['logprobs']
 
         # Send a POST request and get the response
         # An exception for timeout is raised if the server has not issued a response for 10 seconds

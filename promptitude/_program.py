@@ -14,13 +14,13 @@ import nest_asyncio
 # from .llms import _openai
 from . import _utils
 from ._program_executor import ProgramExecutor
-from . import commands
-import guidance
+from .guidance import commands
+from promptitude import guidance
 log = logging.getLogger(__name__)
 
 # load the javascript client code
 file_path = pathlib.Path(__file__).parent.parent.absolute()
-with open(file_path / "guidance" / "resources" / "main.js", encoding="utf-8") as f:
+with open(file_path / "promptitude" / "resources" / "main.js", encoding="utf-8") as f:
     js_data = f.read()
 
 class Log:

@@ -1,4 +1,4 @@
-import guidance
+from promptitude import guidance
 from ..utils import get_llm
 
 def test_hidden_block():
