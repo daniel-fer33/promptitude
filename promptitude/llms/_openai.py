@@ -108,6 +108,10 @@ async def add_text_to_chat_mode_generator(chat_mode):
                     else:
                         c['text'] = val
 
+                if 'logprobs' in c and c['logprobs'] is not None:
+                    if 'top_logprobs' not in c['logprobs']:
+                        c['logprobs']['top_logprobs'] = {}  # TODO: This probably has to be a list
+                    c['logprobs']['top_logprobs'].update({s1['token']: s1['logprob'] for s1 in c['logprobs']['content']})
                 if not found_content and not in_function_call:
                     break  # the role markers are outside the generation in chat mode right now TODO: consider how this changes for uncontrained generation
             else:
@@ -127,7 +131,7 @@ def add_text_to_chat_mode(chat_mode):
         chat_mode = chat_mode.model_dump()
         for c in chat_mode['choices']:
             c['text'] = c['message']['content']
-            if 'logprobs' in c:
+            if 'logprobs' in c and c['logprobs'] is not None:
                 c['logprobs']['top_logprobs'] = {s1['token']: s1['logprob'] for s1 in c['logprobs']['content']}
         return chat_mode
 
