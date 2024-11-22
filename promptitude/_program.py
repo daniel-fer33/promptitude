@@ -1,3 +1,4 @@
+from typing import Union
 import inspect
 import re
 import html
@@ -62,7 +63,18 @@ class Program:
     the generated output to mark where template tags used to be.
     '''
 
-    def __init__(self, text, llm=None, cache_seed=0, logprobs=None, silent=None, async_mode=False, stream=None, caching=None, await_missing=False, log=None, **kwargs):
+    def __init__(self,
+                 text: Union[str, None] = None,
+                 llm: Union[guidance.llms.LLM, None] = None,
+                 cache_seed: Union[int, None] = 0,
+                 logprobs=None,  # TODO: is this int or bool?
+                 silent: Union[bool, None] = None,
+                 async_mode: bool = False,
+                 stream: Union[bool, None] = None,
+                 caching: Union[bool, None] = None,
+                 await_missing: bool = False,
+                 log: Union[bool, None] = None,
+                 **kwargs):
         """ Create a new Program object from a program string.
 
         Parameters
