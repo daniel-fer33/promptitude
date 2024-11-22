@@ -1,5 +1,6 @@
-import random
+from typing import List, Dict
 
+import random
 import aiohttp
 import anthropic
 from anthropic import AsyncAnthropic, AsyncStream
@@ -158,8 +159,14 @@ def merge_stream_chunks(first_chunk, second_chunk):
 class Anthropic(LLM):
     llm_name: str = "anthropic"
 
+    # Serialization
+    excluded_args: List[str] = ['api_key']
+    class_attribute_map: Dict[str, str] = {
+        'model': 'model_name',
+    }
+
     def __init__(self, model=None, caching=True, max_retries=5, max_calls_per_min=60,
-                 api_key=None, api_type="anthropic", api_base=None, api_version=None, deployment_id=None,
+                 api_key=None, api_type="anthropic", api_base=None, api_version=None,
                  temperature=0.0, rest_call=False,
                  allowed_special_tokens=None):
         super().__init__()

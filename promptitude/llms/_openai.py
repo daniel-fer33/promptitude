@@ -1,3 +1,5 @@
+from typing import List, Dict
+
 import openai
 from openai import AsyncOpenAI, AsyncStream
 import os
@@ -140,6 +142,13 @@ class OpenAI(LLM):
     llm_name: str = "openai"
     chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|o1-preview|o1-mini)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
 
+    # Serialization
+    excluded_args: List[str] = ['token', 'api_key']
+    class_attribute_map: Dict[str, str] = {
+        'model': 'model_name',
+        'encoding_name': '_encoding_name'
+    }
+
     def __init__(self, model=None, caching=True, max_retries=5, max_calls_per_min=60,
                  api_key=None, api_type="open_ai", api_base=None, api_version=None, deployment_id=None,
                  temperature=0.0, chat_mode="auto", organization=None, rest_call=False,
@@ -206,6 +215,7 @@ class OpenAI(LLM):
 
         if encoding_name is None:
             encoding_name = tiktoken.encoding_for_model(model).name
+        self._encoding_name = encoding_name
         self._tokenizer = tiktoken.get_encoding(encoding_name)
         self.chat_mode = chat_mode
         
