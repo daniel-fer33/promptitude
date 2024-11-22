@@ -1,7 +1,9 @@
 import unittest
 import re
+import importlib
 
 from promptitude import guidance
+from promptitude.llms import OpenAI
 from ..utils import get_llm
 
 
@@ -141,10 +143,9 @@ You are a helpful assistant.
 
 
 class TestOpenAISerialization(unittest.TestCase):
-
     def test_serialize(self):
         # Create an instance of OpenAI with some parameters
-        openai_instance = guidance.llms.OpenAI(
+        openai_instance = OpenAI(
             model='gpt-3.5-turbo',
             api_key='test_api_key',
             api_base='https://api.openai.com/v1',
@@ -163,17 +164,31 @@ class TestOpenAISerialization(unittest.TestCase):
         # Check that the serialized output is a dictionary
         self.assertIsInstance(serialized, dict)
 
-        # Ensure 'api_key' and 'token' are excluded
-        self.assertNotIn('api_key', serialized)
-        self.assertNotIn('token', serialized)
+        # Ensure 'module_name', 'class_name', and 'init_args' are present
+        self.assertIn('module_name', serialized)
+        self.assertIn('class_name', serialized)
+        self.assertIn('init_args', serialized)
 
-        # Ensure that class_attribute_map is correctly applied
+        # Verify that 'module_name' and 'class_name' have correct values
+        self.assertEqual(serialized['module_name'], openai_instance.__module__)
+        self.assertEqual(serialized['class_name'], openai_instance.__class__.__name__)
+
+        # Ensure 'init_args' is a dictionary
+        self.assertIsInstance(serialized['init_args'], dict)
+
+        # Ensure 'api_key' and 'token' are excluded from 'init_args'
+        self.assertNotIn('api_key', serialized['init_args'])
+        self.assertNotIn('token', serialized['init_args'])
+
+        # Ensure that class_attribute_map is correctly applied in 'init_args'
         for arg, attr_name in openai_instance.class_attribute_map.items():
-            self.assertIn(arg, serialized)
-            self.assertEqual(serialized[arg], getattr(openai_instance, attr_name))
+            self.assertIn(arg, serialized['init_args'])
+            self.assertEqual(serialized['init_args'][arg], getattr(openai_instance, attr_name))
 
-        # Create a new instance using the serialized dict
-        new_openai_instance = guidance.llms.OpenAI(**serialized)
+        # Create a new instance using the 'init_args'
+        module_name, class_name = serialized['module_name'], serialized['class_name']
+        cls = getattr(importlib.import_module(module_name), class_name)
+        new_openai_instance = cls(**serialized['init_args'])
 
         # Check that the new instance has the same attributes as the original
         self.assertEqual(new_openai_instance.model_name, openai_instance.model_name)

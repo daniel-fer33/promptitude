@@ -108,6 +108,7 @@ type {{function.name}} = (_: {
             return self._cache
         else:
             return self.__class__.cache
+
     @cache.setter
     def cache(self, value):
         self._cache = value
@@ -117,9 +118,13 @@ type {{function.name}} = (_: {
         class_attribute_map = self.class_attribute_map
         init_params = inspect.signature(self.__init__).parameters
         out = {
-            arg: getattr(self, class_attribute_map.get(arg, arg))
-            for arg in init_params
-            if arg not in excluded_args and hasattr(self, class_attribute_map.get(arg, arg))
+            'module_name': self.__module__,
+            'class_name': self.__class__.__name__,
+            'init_args': {
+                arg: getattr(self, class_attribute_map.get(arg, arg))
+                for arg in init_params
+                if arg not in excluded_args and hasattr(self, class_attribute_map.get(arg, arg))
+            }
         }
         return out
 
