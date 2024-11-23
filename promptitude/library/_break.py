@@ -1,7 +1,32 @@
-def break_():
-    ''' Breaks out of the current loop.
+def break_() -> None:
+    """
+    Break out of the current loop.
 
-    This is useful for breaking out of a geneach loop early, typically this is used
-    inside an `{{#if ...}}...{{/if}}` block.
-    '''
+    This function is useful for breaking out of a loop early in guidance templates,
+    typically used inside an `{{#if ...}}...{{/if}}` block.
+
+    Raises
+    ------
+    StopIteration
+        Raised to signal the loop to stop.
+
+    Examples
+    --------
+    Use within a guidance template:
+
+    >>> from promptitude import guidance
+    >>> program = guidance('''
+    ... {{#each list}}
+    ... {{this}}
+    ... {{#if (equal this 5)}}{{break}}{{/if}}
+    ... {{/each}}
+    ... ''')
+    >>> output = program(list=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    >>> print(output.text)
+    1
+    2
+    3
+    4
+    5
+    """
     raise StopIteration()

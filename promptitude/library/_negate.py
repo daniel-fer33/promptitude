@@ -1,4 +1,7 @@
-def negate(x):
+from numbers import Number
+
+
+def negate(x: Number) -> Number:
     """
     Returns the negation of the given numeric value.
 
@@ -19,10 +22,13 @@ def negate(x):
 
     Examples
     --------
-    >>> negate(5)
+    Use within a guidance template:
+
+    >>> from promptitude import guidance
+    >>> program = guidance("Result: {{set 'result' (-variable)}}")
+    >>> output = program(variable=5)
+    >>> print(output["result"])
     -5
-    >>> negate(-3)
-    3
     """
     if not isinstance(x, (int, float)):
         raise TypeError(f"Unary '-' operator is not supported for type '{type(x).__name__}'.")

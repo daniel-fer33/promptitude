@@ -1,43 +1,80 @@
+from typing import Optional, Union, Dict, Any, List
+
 import re
+
 from .._utils import ContentCapture
 
-async def geneach(list_name, stop=None, max_iterations=100, min_iterations=0, num_iterations=None, hidden=False, join="", single_call=False, single_call_temperature=0.0, single_call_max_tokens=500, single_call_top_p=1.0, _parser_context=None):
-    ''' Generate a potentially variable length list of items using the LLM.
+
+async def geneach(
+    list_name: str,
+    stop: Optional[Union[str, List[str]]] = None,
+    max_iterations: int = 100,
+    min_iterations: int = 0,
+    num_iterations: Optional[int] = None,
+    hidden: bool = False,
+    join: str = "",
+    single_call: bool = False,
+    single_call_temperature: float = 0.0,
+    single_call_max_tokens: int = 500,
+    single_call_top_p: float = 1.0,
+    _parser_context: Optional[Dict[str, Any]] = None,
+):
+    """
+    Generate a potentially variable length list of items using the LLM.
 
     Parameters
     ----------
     list_name : str
         The name of the variable to save the generated list to.
-    stop : str or list of str
-        A string or list of strings that will stop the generation of the list. For example if stop="</ul>"
-        then the list will be generated until the first "</ul>" is generated.
-    max_iterations : int
-        The maximum number of items to generate.
-    min_iterations : int
-        The minimum number of items to generate.
-    num_iterations : int
-        The exact number of items to generate (this overrides max_iterations and min_iterations).
-    hidden : bool
-        If True, the generated list items will not be added to the LLMs input context. This means that each
-        item will be generated independently of the others. Note that if you use hidden=True you must also
-        set num_iterations to a fixed number (since without adding items the context there is not way for the
+    stop : str or list of str, optional
+        A string or list of strings that will stop the generation of the list. For example, if `stop="</ul>"`,
+        then the list will be generated until the first `"</ul>"` is generated.
+    max_iterations : int, optional
+        The maximum number of items to generate. Default is `100`.
+    min_iterations : int, optional
+        The minimum number of items to generate. Default is `0`.
+    num_iterations : int, optional
+        The exact number of items to generate (this overrides `max_iterations` and `min_iterations`).
+    hidden : bool, optional
+        If `True`, the generated list items will not be added to the LLM's input context. This means that each
+        item will be generated independently of the others. Note that if you use `hidden=True`, you must also
+        set `num_iterations` to a fixed number (since without adding items to the context, there is no way for the
         LLM to know when to stop on its own).
-    join : str
-        A string to join the generated items with.
-    single_call : bool
-        This is an option designed to make look generation more convienent for LLMs that don't support guidance
-        acceleration. If True, the LLM will be called once to generate the entire list. This only works if the
+    join : str, optional
+        A string to join the generated items with. Default is an empty string.
+    single_call : bool, optional
+        This is an option designed to make loop generation more convenient for LLMs that don't support guidance
+        acceleration. If `True`, the LLM will be called once to generate the entire list. This only works if the
         LLM has already been prompted to generate content that matches the format of the list. After the single
-        call, the generated list variables will be parsed out of the generated text using a regex. (note that only
-        basic template tags are supported in the list items when using single_call=True).
-    single_call_temperature : float
-        Only used with single_call=True. The temperature to use when generating the list items in a single call.
-    single_call_max_tokens : int
-        Only used with single_call=True. The maximum number of tokens to generate when generating the list items.
-    single_call_top_p : float
-        Only used with single_call=True. The top_p to use when generating the list items in a single call.
-    
-    '''
+        call, the generated list variables will be parsed out of the generated text using a regex. (Note that only
+        basic template tags are supported in the list items when using `single_call=True`). Default is `False`.
+    single_call_temperature : float, optional
+        Only used with `single_call=True`. The temperature to use when generating the list items in a single call. Default is `0.0`.
+    single_call_max_tokens : int, optional
+        Only used with `single_call=True`. The maximum number of tokens to generate when generating the list items. Default is `500`.
+    single_call_top_p : float, optional
+        Only used with `single_call=True`. The `top_p` to use when generating the list items in a single call. Default is `1.0`.
+    _parser_context : dict or None, optional
+        Internal parser context (used internally). Default is `None`.
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    Use within a guidance template:
+
+    >>> from promptitude import guidance
+    >>> program = guidance('''
+    ... <instructions>Generate a list of three names</instructions>
+    ... <list>{{#geneach 'names' num_iterations=3}}
+    ... <item index="{{@index}}">{{gen 'this'}}</item>{{/geneach}}</list>
+    ... ''')
+    >>> output = program()
+    >>> print(output["names"])
+    ['Name1', 'Name2', 'Name3']
+    """
     block_content = _parser_context["block_content"]
     parser = _parser_context["parser"]
     variable_stack = _parser_context["variable_stack"]
@@ -248,10 +285,14 @@ async def geneach(list_name, stop=None, max_iterations=100, min_iterations=0, nu
     #     return out_str + "{{!--" + f"GMARKER_each_noecho_end${id}$" + "--}}"
 
     #     # return "{{!--GMARKER_each_noecho$$}}" + "{{!--GMARKER_each_noecho$$}}".join(out) + "{{!--GMARKER_each_noecho$$}}"
+
+
 geneach.is_block = True
 
-def _escape_group_name(name):
+
+def _escape_group_name(name: str) -> str:
     return name.replace("@", "_AT_").replace(".", "_DOT_")
 
-def _unescape_group_name(name):
+
+def _unescape_group_name(name: str) -> str:
     return name.replace("_AT_", "@").replace("_DOT_", ".")

@@ -1,20 +1,56 @@
-async def await_(name, consume="yes_for_now", _parser_context=None):
-    ''' Awaits a variable by returning its value and then deleting it.
+from typing import Any, Dict, Union
 
-    Note that this is useful for repeatedly getting values since programs
-    will pause when they need a value that is not yet set. This means
-    that putting `await` in a loop will create a stateful "agent" that can
-    repeatedly await values when called multiple times.
+
+async def await_(name: str, consume: bool = True, _parser_context: Union[Dict, None] = None) -> Any:
+    """
+    Awaits a variable by returning its value and then optionally deleting it.
+
+    This function is useful for repeatedly getting values since programs
+    will pause when they need a value that is not yet set. Placing `await_`
+    in a loop creates a stateful "agent" that can repeatedly await values
+    when called multiple times.
 
     Parameters
     ----------
     name : str
         The name of the variable to await.
-    '''
+    consume : bool, optional
+        Whether to delete the variable from the variable stack after returning its value.
+        Defaults to True.
+    _parser_context : dict or None, optional
+        Internal parser context (used internally). Default is None.
 
-    # stop the program completion if we are waiting for a value to be set
-    # this will result in a partially completed program that we can then finish
-    # later (by calling it again with the variable we need)
+    Returns
+    -------
+    Any
+        The value of the awaited variable.
+
+    Raises
+    ------
+    TypeError
+        If 'name' is not a string.
+        If 'consume' is not a boolean.
+    ValueError
+        If '_parser_context' is None.
+
+    Examples
+    --------
+    Use within a guidance template:
+
+    >>> from promptitude import guidance
+    >>> prompt = guidance("User response: '{{await_('user_response')}}'")
+    >>> # The program will wait until 'user_response' is provided
+    >>> output = prompt(user_response='Yes')
+    >>> print(output)
+    User response: 'Yes'
+    """
+    if not isinstance(name, str):
+        raise TypeError(f"'name' must be of type str, got {type(name)}.")
+    if not isinstance(consume, bool):
+        raise TypeError(f"'consume' must be of type bool, got {type(consume)}.")
+    if _parser_context is None:
+        raise ValueError("'_parser_context' cannot be None.")
+
     parser = _parser_context['parser']
     variable_stack = _parser_context['variable_stack']
     if name not in variable_stack:
@@ -24,15 +60,3 @@ async def await_(name, consume="yes_for_now", _parser_context=None):
         if consume:
             del variable_stack[name]
         return value
-    
-    # cache = parser.program._await_cache
-    # while name not in cache:
-    #     parser.program.finish_execute() # allow the program to finish the current call (since we're waiting for a value from the next call now)
-    #     # TODO: instead of waiting here, we should just single we are stopping the program completion here
-    #     #       and then let all the containing elements record their state into a new program string that
-    #     #       we can then use to continue the program completion later in a new object.
-    #     cache.update(await parser.program._await_queue.get())
-    #     pass
-    # value = cache[name]
-    # del cache[name]
-    # return value
