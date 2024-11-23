@@ -1,7 +1,9 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 import asyncio
 import re
 import json
+import inspect
+
 from promptitude import guidance
 
 from .caches import DiskCache
@@ -18,10 +20,15 @@ class LLMMeta(type):
     def cache(cls, value):
         cls._cache = value
 
+
 class LLM(metaclass=LLMMeta):
     cache_version = 1
     default_system_prompt = "You are a helpful assistant."
     llm_name: str = "unknown"
+
+    # Serialization
+    excluded_args: List[str] = []
+    class_attribute_map: Dict[str, str] = {}
 
     def __init__(self):
         self.chat_mode = False  # by default models are not in role-based chat mode
@@ -101,9 +108,25 @@ type {{function.name}} = (_: {
             return self._cache
         else:
             return self.__class__.cache
+
     @cache.setter
     def cache(self, value):
         self._cache = value
+
+    def serialize(self) -> Dict:
+        excluded_args = set(self.excluded_args)
+        class_attribute_map = self.class_attribute_map
+        init_params = inspect.signature(self.__init__).parameters
+        out = {
+            'module_name': self.__module__,
+            'class_name': self.__class__.__name__,
+            'init_args': {
+                arg: getattr(self, class_attribute_map.get(arg, arg))
+                for arg in init_params
+                if arg not in excluded_args and hasattr(self, class_attribute_map.get(arg, arg))
+            }
+        }
+        return out
 
 
 class LLMSession:

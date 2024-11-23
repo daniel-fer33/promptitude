@@ -1,3 +1,4 @@
+from typing import Union, Dict
 import inspect
 import re
 import html
@@ -11,17 +12,32 @@ import os
 import time
 import datetime
 import nest_asyncio
+from dataclasses import dataclass
+import importlib
+
+import promptitude
+from promptitude import guidance
+from promptitude import llms
 # from .llms import _openai
 from . import _utils
 from ._program_executor import ProgramExecutor
 from .guidance import commands
-from promptitude import guidance
+
 log = logging.getLogger(__name__)
 
 # load the javascript client code
 file_path = pathlib.Path(__file__).parent.parent.absolute()
 with open(file_path / "promptitude" / "resources" / "main.js", encoding="utf-8") as f:
     js_data = f.read()
+
+
+@dataclass
+class ProgramState:
+    serialized_llm: Union[Dict, None]
+    attributes: Dict
+    variables: Dict
+    text: str
+
 
 class Log:
     def __init__(self) -> None:
@@ -55,6 +71,7 @@ class Log:
         new_log._entries = [copy.copy(v) for v in self._entries]
         return new_log
 
+
 class Program:
     ''' A program template that can be compiled and executed to generate a new filled in (executed) program.
 
@@ -62,7 +79,19 @@ class Program:
     the generated output to mark where template tags used to be.
     '''
 
-    def __init__(self, text, llm=None, cache_seed=0, logprobs=None, silent=None, async_mode=False, stream=None, caching=None, await_missing=False, log=None, **kwargs):
+    def __init__(self,
+                 text: Union[str, None] = None,
+                 llm: Union[llms.LLM, None] = None,
+                 initial_state: Union[ProgramState, None] = None,
+                 cache_seed: Union[int, None] = 0,
+                 logprobs=None,  # TODO: is this int or bool?
+                 silent: Union[bool, None] = None,
+                 async_mode: bool = False,
+                 stream: Union[bool, None] = None,
+                 caching: Union[bool, None] = None,
+                 await_missing: bool = False,
+                 log: Union[bool, None] = None,
+                 **kwargs):
         """ Create a new Program object from a program string.
 
         Parameters
@@ -71,10 +100,12 @@ class Program:
             The program string to use as a guidance template.
         llm : guidance.llms.LLM (defaults to guidance.llm)
             The language model to use for executing the program.
+        initial_state : ProgramState or None
+            The initial state to use for the program variables.
         cache_seed : int (default 0) or None
             The seed to use for the cache. If you want to use the same cache for multiple programs
             you can set this to the same value for all of them. Set this to None to disable caching.
-            Caching is enabled by default, and saves calls that have tempurature=0, and also saves
+            Caching is enabled by default, and saves calls that have temperature=0, and also saves
             higher temperature calls but uses different seed for each call.
         logprobs : int or None (default)
             The number of logprobs to return from the language model for each token. (not well supported yet,
@@ -113,7 +144,38 @@ class Program:
             fname = _utils.find_func_name(text, kwargs)
             kwargs[fname] = text
             text = "{{set (%s%s)}}" % (fname, args)
-        
+
+        # Ensure that either text or initial_state is provided
+        if text is None:
+            if initial_state is None:
+                raise ValueError("Either 'text' or 'initial_state' must be specified.")
+        else:
+            if initial_state is not None:
+                raise ValueError("Only one of 'text' or 'initial_state' must be specified.")
+
+        if initial_state is not None:
+            # llm
+            if initial_state.serialized_llm is not None and llm is None:
+                serialized_llm = initial_state.serialized_llm
+                module_name, class_name = serialized_llm['module_name'], serialized_llm['class_name']
+                cls = getattr(importlib.import_module(module_name), class_name)
+                llm = cls(**serialized_llm['init_args'])
+
+            # Instance attributes.
+            attributes = initial_state.attributes
+            # Passed arguments have priority over initial state
+            cache_seed = cache_seed or attributes['cache_seed']
+            logprobs = logprobs or attributes['logprobs']
+            silent = silent or attributes['silent']
+            async_mode = async_mode or attributes['async_mode']
+            stream = stream or attributes['stream']
+            caching = caching or attributes['caching']
+            await_missing = await_missing or attributes['await_missing']
+            log = log or attributes['log']
+
+            # Text
+            text = initial_state.text
+
         # save the given parameters
         self._text = text
         self.llm = llm or getattr(guidance, "llm", None)
@@ -124,6 +186,7 @@ class Program:
         self.silent = silent
         self.stream = stream
         self.await_missing = await_missing
+        self._logging = log  # Keep initial value of the argument
         self.log = log
         if self.silent is None:
             self.silent = self.stream is True or not _utils.is_interactive()
@@ -145,6 +208,9 @@ class Program:
                 kwargs["@"+k[4:]] = kwargs[k]
                 kwargs.pop(k)
         self._variables.update(kwargs)
+        if initial_state is not None:
+            # variables in initial state have priority
+            self._variables.update(initial_state.variables)
         
         # set internal state variables
         self._id = str(uuid.uuid4())
@@ -177,7 +243,7 @@ class Program:
         # if we are echoing in ipython we assume we can display html
         if self._ipython and not self.silent:
             self._displaying_html = True
-    
+
     def __repr__(self):
         return self.text
     
@@ -511,7 +577,36 @@ class Program:
             return self._variables["@raw_prefix"]
         else:
             return self._text
-    
+
+    @property
+    def state(self) -> ProgramState:
+        exclude_variables = ['llm', 'logging']
+        variables = {}
+        for k, v in self._variables.items():
+            if (
+                    (k in exclude_variables)  # Exclude variables
+                    or (k in _built_ins)  # Exclude built-ins
+                    or (callable(v))  # Exclude functions
+                    or (k.startswith("__"))  # Exclude system variables
+            ):
+                continue
+            variables[k] = v
+        return ProgramState(
+            serialized_llm=self.llm.serialize() if self.llm is not None else None,
+            attributes=dict(
+                cache_seed=self.cache_seed,
+                logprobs=self.logprobs,
+                silent=self.silent,
+                async_mode=self.async_mode,
+                stream=self.stream,
+                caching=self.caching,
+                await_missing=self.await_missing,
+                log=self._logging
+            ),
+            variables=variables,
+            text=self._text,
+        )
+
     def _build_html(self, text, last=False):
         output = text
 

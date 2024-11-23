@@ -1,4 +1,8 @@
+import unittest
+import importlib
+
 from promptitude import guidance
+from promptitude.llms import Anthropic
 from ..utils import get_llm
 
 
@@ -82,3 +86,59 @@ You are a helpful assistant.
 {{~/assistant}}''')
     prompt = prompt(conversation_question='Whats is the meaning of life??')
     assert len(prompt['answer']) > 0
+
+
+class TestAnthropicSerialization(unittest.TestCase):
+    def test_serialize(self):
+        # Create an instance of Anthropic with some parameters
+        anthropic_instance = Anthropic(
+            model='claude-v1',
+            api_key='test_api_key',
+            temperature=0.5,
+            rest_call=True,
+            api_type='anthropic_test',
+            api_base='https://api.anthropic.com/v1',
+            api_version='2023-01-01',
+            allowed_special_tokens={'<|endoftext|>', '<|custom_token|>'}
+        )
+
+        # Serialize the instance
+        serialized = anthropic_instance.serialize()
+
+        # Check that the serialized output is a dictionary
+        self.assertIsInstance(serialized, dict)
+
+        # Ensure 'module_name', 'class_name', and 'init_args' are present
+        self.assertIn('module_name', serialized)
+        self.assertIn('class_name', serialized)
+        self.assertIn('init_args', serialized)
+
+        # Verify that 'module_name' and 'class_name' have correct values
+        self.assertEqual(serialized['module_name'], anthropic_instance.__module__)
+        self.assertEqual(serialized['class_name'], anthropic_instance.__class__.__name__)
+
+        # Ensure 'init_args' is a dictionary
+        self.assertIsInstance(serialized['init_args'], dict)
+
+        # Ensure 'api_key' and 'token' are excluded from 'init_args'
+        self.assertNotIn('api_key', serialized['init_args'])
+        self.assertNotIn('token', serialized['init_args'])
+
+        # Ensure that class_attribute_map is correctly applied in 'init_args'
+        for arg, attr_name in anthropic_instance.class_attribute_map.items():
+            self.assertIn(arg, serialized['init_args'])
+            self.assertEqual(serialized['init_args'][arg], getattr(anthropic_instance, attr_name))
+
+        # Create a new instance using the 'init_args'
+        module_name, class_name = serialized['module_name'], serialized['class_name']
+        cls = getattr(importlib.import_module(module_name), class_name)
+        new_anthropic_instance = cls(**serialized['init_args'])
+
+        # Check that the new instance has the same attributes as the original
+        self.assertEqual(new_anthropic_instance.model_name, anthropic_instance.model_name)
+        self.assertEqual(new_anthropic_instance.temperature, anthropic_instance.temperature)
+        self.assertEqual(new_anthropic_instance.rest_call, anthropic_instance.rest_call)
+        self.assertEqual(new_anthropic_instance.api_type, anthropic_instance.api_type)
+        self.assertEqual(new_anthropic_instance.api_base, anthropic_instance.api_base)
+        self.assertEqual(new_anthropic_instance.api_version, anthropic_instance.api_version)
+        self.assertEqual(new_anthropic_instance.allowed_special_tokens, anthropic_instance.allowed_special_tokens)

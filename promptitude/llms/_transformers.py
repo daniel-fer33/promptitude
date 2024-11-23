@@ -1,3 +1,5 @@
+from typing import List, Dict
+
 import os
 import time
 import collections
@@ -14,6 +16,12 @@ class Transformers(LLM):
     """
 
     llm_name: str = "transformers"
+
+    # Serialization
+    excluded_args: List[str] = []
+    class_attribute_map: Dict[str, str] = {
+        'model': 'model_name',
+    }
 
     def __init__(self, model=None, tokenizer=None, caching=True, token_healing=True, acceleration=True, \
                  temperature=0.0, device=None, **kwargs):
