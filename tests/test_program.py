@@ -210,3 +210,73 @@ Hello my name is {{gen 'name' temperature=0 max_tokens=5}}.
         "Expect the exception to be propagated"
 
     loop.close()
+
+
+def test_initial_state():
+    """ Test that we can get the state of a Program and pass it as initial_state to a new Program """
+    guidance.llm = get_llm('transformers:gpt2')
+
+    # Create and execute a Program
+    program = guidance("""Answer the following question: {{question}}
+    {{gen 'answer' max_tokens=5}}""")
+    executed_program = program(question="What is the capital of France?")
+
+    # Get the state
+    state = executed_program.state
+
+    # Create a new Program with the initial_state
+    new_program = guidance(initial_state=state)
+
+    # Ensure that the new program has the same text and variables
+    assert new_program.text == executed_program.text
+    assert new_program.variables() == executed_program.variables()
+
+
+@pytest.mark.parametrize("llm", ["openai:gpt-4o-mini", ])
+def test_initial_state_partial_execution(llm):
+    """ Test that we can serialize a partially executed Program and continue execution with initial_state """
+    llm = get_llm(llm)
+
+    # Create a Program that uses 'await' to pause execution
+    program = guidance("""
+    {{#system~}}
+    You are a helpful assistant.
+    {{~/system}}
+
+    {{#user~}}
+    Answer the following question: {{question}}
+    {{~/user}}
+
+    {{#assistant~}}
+    {{#if response}}
+    The answer is: {{response}}
+    {{else}}
+    Let me think about it.
+    {{set 'response' (await 'response')}}
+    The answer is: {{response}}
+    {{/if}}
+    {{~/assistant}}
+    """, llm=llm)
+
+    # Execute the Program without providing 'response', so it should pause and await
+    partial_program = program(question="What is the capital of France?", await_missing=True)
+
+    # Ensure that 'response' is missing
+    assert 'response' not in partial_program.variables()
+    assert "Let me think about it." in str(partial_program)
+    assert "The answer is: Paris" not in str(partial_program)
+
+    # Get the state
+    state = partial_program.state
+
+    # Now, suppose we receive the 'response' and want to continue execution
+    # Create a new Program with initial_state, provide 'response', and execute to continue
+    new_program = guidance(initial_state=state)
+
+    # Continue the execution
+    final_program = new_program(response="Paris")
+
+    # Check that execution completed, and 'response' variable is set
+    assert final_program['response'] == "Paris"
+    assert "Let me think about it." not in str(final_program)
+    assert "The answer is: Paris" in str(final_program)
