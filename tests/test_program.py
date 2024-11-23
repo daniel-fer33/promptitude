@@ -229,7 +229,7 @@ def test_initial_state():
 
     # Ensure that the new program has the same text and variables
     assert new_program.text == executed_program.text
-    assert new_program.variables() == executed_program.variables()
+    assert new_program.state == state
 
 
 @pytest.mark.parametrize("llm", ["openai:gpt-4o-mini", ])
