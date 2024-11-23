@@ -1,5 +1,6 @@
 from promptitude import guidance
 
+
 def test_user():
     """ Basic test of `user`.
     """

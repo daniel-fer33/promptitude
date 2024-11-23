@@ -1,5 +1,6 @@
 from promptitude import guidance
 
+
 def test_geneach():
     """ Test a geneach loop.
     """
@@ -7,7 +8,7 @@ def test_geneach():
     llm = guidance.llms.Mock({
         'Joe</item>': {"text": '</list>', "finish_reason": "stop"},
         '</item>': {"text": '\n<item', "finish_reason": "length"},
-        '">' : ["Bob", "Sue", "Joe"],
+        '">': ["Bob", "Sue", "Joe"],
     })
     prompt = guidance('''<instructions>Generate a list of three names</instructions>
 <list>{{#geneach 'names' stop="</list>"}}
@@ -21,6 +22,7 @@ def test_geneach():
 <item index="1">Sue</item>
 <item index="2">Joe</item></list>"""
 
+
 def test_geneach_with_join():
     """ Test a geneach loop.
     """
@@ -28,7 +30,7 @@ def test_geneach_with_join():
     llm = guidance.llms.Mock({
         'Joe</item>': {"text": '</list>', "finish_reason": "stop"},
         '</item>': {"text": '\n<item', "finish_reason": "length"},
-        '">' : ["Bob", "Sue", "Joe"],
+        '">': ["Bob", "Sue", "Joe"],
     })
     prompt = guidance('''<instructions>Generate a list of three names</instructions>
 <list>{{#geneach 'names' join="<mark>" stop="</list>"}}
@@ -41,6 +43,7 @@ def test_geneach_with_join():
 <item index="0">Bob</item><mark>
 <item index="1">Sue</item><mark>
 <item index="2">Joe</item></list>"""
+
 
 def test_geneach_single_call():
     """ Test a geneach loop.
@@ -56,6 +59,7 @@ def test_geneach_single_call():
 <item index="{{@index}}">{{gen 'this'}}</item>{{/geneach}}</list>"''', llm=llm)
     out = prompt()
     assert len(out["names"]) == 3
+
 
 def test_geneach_with_index():
     """ Test a geneach loop.

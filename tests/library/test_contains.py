@@ -1,5 +1,6 @@
 from promptitude import guidance
 
+
 def test_contains():
     """ Test the behavior of `contains`.
     """

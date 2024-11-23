@@ -1,5 +1,6 @@
 from promptitude import guidance
 
+
 def test_role():
     """ Test the behavior of `role`.
     """
@@ -20,7 +21,9 @@ What is the weather?
 """, llm=llm)
 
     out = prompt()
-    assert str(out) == '\n<|im_start|>system\nYou are an assistant.<|im_end|>\n\n<|im_start|>user\nWhat is the weather?<|im_end|>\n\n<|im_start|>assistant\nmock output 0<|im_end|>\n'
+    assert str(
+        out) == '\n<|im_start|>system\nYou are an assistant.<|im_end|>\n\n<|im_start|>user\nWhat is the weather?<|im_end|>\n\n<|im_start|>assistant\nmock output 0<|im_end|>\n'
+
 
 def test_short_roles():
     """ Test the behavior of the shorthand versions of `role`.
@@ -42,5 +45,5 @@ What is the weather?
 """, llm=llm)
 
     out = prompt(test="asdfa")
-    assert str(out) == '\n<|im_start|>system\nYou are an assistant.<|im_end|>\n\n<|im_start|>user\nWhat is the weather?<|im_end|>\n\n<|im_start|>assistant\nmock output 0<|im_end|>\n'
-    
+    assert str(
+        out) == '\n<|im_start|>system\nYou are an assistant.<|im_end|>\n\n<|im_start|>user\nWhat is the weather?<|im_end|>\n\n<|im_start|>assistant\nmock output 0<|im_end|>\n'

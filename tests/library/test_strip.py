@@ -1,5 +1,6 @@
 from promptitude import guidance
 
+
 def test_strip():
     """ Test the behavior of `strip`.
     """
