@@ -29,3 +29,4 @@ from ._range import range
 from ._len import len
 from ._not import not_
 from ._assert import assert_
+from ._negate import negate

@@ -1,5 +1,6 @@
 from promptitude import guidance
 
+
 def test_break_each():
     """ Test the behavior of `break` in an `each` loop.
     """

@@ -1,5 +1,6 @@
 from promptitude import guidance
 
+
 def test_assistant():
     """ Basic test of `assistant`.
     """
@@ -12,4 +13,4 @@ def test_assistant():
 {{#assistant}}{{gen 'output' save_prompt='prompt'}}{{/assistant}}""", llm=llm)
     out = program()
     assert out["output"] == "the output"
-    #assert str(out) == '\n<|im_start|>system\nYou are fake.<|im_end|>\n<|im_start|>user\nYou are real.<|im_end|>\n<|im_start|>assistant\nthe output<|im_end|>'
+    # assert str(out) == '\n<|im_start|>system\nYou are fake.<|im_end|>\n<|im_start|>user\nYou are real.<|im_end|>\n<|im_start|>assistant\nthe output<|im_end|>'

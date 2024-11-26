@@ -1,19 +1,55 @@
-import subprocess
 import os
 import subprocess
 import asyncio
+from typing import Any, Union, Dict
 
 
-def shell(command, safe=True, _parser_context=None):
-    """ Execute a shell command on the local machine (with user confirmation by default).
+def shell(command: str, safe: bool = True, _parser_context: Union[Dict[str, Any], None] = None) -> str:
+    """
+    Execute a shell command on the local machine (with user confirmation by default).
 
     Parameters
     ----------
     command : str
         The command to execute.
-    safe : bool
-        If True, the user will be asked to confirm the command before it is executed.
+    safe : bool, optional
+        If True, the user will be asked to confirm the command before it is executed. Default is True.
+    _parser_context : dict or None, optional
+        Internal parser context (used internally). Default is None.
+
+    Returns
+    -------
+    output : str
+        The output of the executed command.
+
+    Raises
+    ------
+    ValueError
+        If `_parser_context` is None.
+    KeyboardInterrupt
+        If execution is aborted by the user.
+    subprocess.CalledProcessError
+        If the command returns a non-zero exit status.
+
+    Examples
+    --------
+    Use within a guidance template:
+
+    >>> from promptitude import guidance
+    >>> program = guidance("{{shell 'echo Hello World'}}")
+    >>> output = program()
+    >>> print(output)
+    Hello World
+
+    Note
+    ----
+    The `shell` function is powerful and can execute arbitrary commands on your machine.
+    Use with caution, especially when `safe` is set to False.
+
     """
+
+    if _parser_context is None:
+        raise ValueError("_parser_context cannot be None")
     
     partial_output = _parser_context['partial_output']
     partial_output("{{execute '"+command+"'}}")

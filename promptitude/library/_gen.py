@@ -1,14 +1,18 @@
+from typing import Union, Dict, Any
+
 import asyncio
 import re
 import uuid
 import logging
 import types
+
+from promptitude import llms
 from .._utils import escape_template_block, AsyncIter
 
 log = logging.getLogger(__name__)
 
-def load_alt_model(model_name):
-    from guidance import llms
+
+def load_alt_model(model_name: str) -> llms.LLM:
     if model_name.startswith("gpt-") or model_name.startswith("o1-"):
         return llms.OpenAI(model_name, caching=False)
     elif model_name.startswith("claude-"):
@@ -16,20 +20,38 @@ def load_alt_model(model_name):
     else:
         return llms.Transformers(model_name, device='cpu', caching=False)
 
-async def gen(name=None, stop=None, stop_regex=None, save_stop_text=False, max_tokens=500, n=1, stream=None,
-              temperature=0.0, top_p=1.0, logprobs=None, pattern=None, hidden=False, list_append=False,
-              save_prompt=False, token_healing=None, function_call="none", llm_alt_model=None, _parser_context=None, **llm_kwargs):
-    ''' Use the LLM to generate a completion.
+
+async def gen(name: Union[str, None] = None,
+              stop: Union[str, None] = None,
+              stop_regex: Union[str, None] = None,
+              save_stop_text: Union[bool, str] = False,
+              max_tokens: int = 500,
+              n: int = 1,
+              stream: Union[bool, None] = None,
+              temperature: float = 0.0,
+              top_p: float = 1.0,
+              logprobs: Union[int, None] = None,
+              pattern: Union[str, None] = None,
+              hidden: bool = False,
+              list_append: bool = False,
+              save_prompt: Union[bool, str] = False,
+              token_healing: Union[bool, None] = None,
+              function_call: str = "none",
+              llm_alt_model: Union[str, llms.LLM, None] = None,
+              _parser_context: Union[Dict, None] = None,
+              **llm_kwargs: Any) -> Any:
+    """
+    Use the LLM to generate a completion.
 
     Parameters
     ----------
     name : str or None
-        The name of a variable to store the generated value in. If none the value is just returned.
-    stop : str
+        The name of a variable to store the generated value in. If None, the value is just returned.
+    stop : str or None
         The stop string to use for stopping generation. If not provided, the next node's text will be used if
         that text matches a closing quote, XML tag, or role end. Note that the stop string is not included in
         the generated value.
-    stop_regex : str
+    stop_regex : str or None
         A regular expression to use for stopping generation. If not provided, the stop string will be used.
     save_stop_text : str or bool
         If set to a string, the exact stop text used will be saved in a variable with the given name. If set to
@@ -51,7 +73,7 @@ async def gen(name=None, stop=None, stop_regex=None, save_stop_text=False, max_t
         which will be stored in a variable named `name+"_logprobs"`. If set to None, the log
         probabilities will not be returned.
     pattern : str or None
-        A regular expression pattern guide to use for generation. If set the LLM will be forced (through guided
+        A regular expression pattern guide to use for generation. If set, the LLM will be forced (through guided
         decoding) to only generate completions that match the regular expression.
     hidden : bool
         Whether to hide the generated value from future LLM context. This is useful for generating completions
@@ -62,11 +84,48 @@ async def gen(name=None, stop=None, stop_regex=None, save_stop_text=False, max_t
     save_prompt : str or bool
         If set to a string, the exact prompt given to the LLM will be saved in a variable with the given name.
     token_healing : bool or None
-        If set to a bool this overrides the token_healing setting for the LLM.
+        If set to a bool, this overrides the token_healing setting for the LLM.
+    function_call : str
+        Specifies the function call behavior (e.g., "none", "auto").
+    llm_alt_model : str or llms.LLM or None
+        An alternative LLM model to use for this generation.
+    _parser_context : dict or None
+        Internal parser context (used internally).
     **llm_kwargs
         Any other keyword arguments will be passed to the LLM __call__ method. This can be useful for setting
         LLM-specific parameters like `repetition_penalty` for Transformers models or `suffix` for some OpenAI models.
-    '''
+
+    Returns
+    -------
+    Any
+        The generated value(s) from the LLM.
+
+    Examples
+    --------
+    Use within a guidance template:
+
+    >>> from promptitude import guidance
+    >>> program = guidance("Answer: {{gen 'answer' max_tokens=5}}")
+    >>> output = program()
+    >>> print(output['answer'])
+
+    Use with specified temperature:
+
+    >>> program = guidance("Response: {{gen 'response' temperature=0.7 max_tokens=5}}")
+    >>> output = program()
+    >>> print(output['response'])
+
+    Use without specifying a variable name:
+
+    >>> program = guidance("{{gen max_tokens=5}}")
+    >>> output = program()
+    >>> print(output)
+
+    Note
+    ----
+    The `gen` command is used to interact with the LLM to generate text based on the current context and parameters provided.
+
+    """
     prefix = ""
     suffix = ""
 
@@ -145,124 +204,131 @@ async def gen(name=None, stop=None, stop_regex=None, save_stop_text=False, max_t
 
     assert parser.llm_session is not None, "You must set an LLM for the program to use (use the `llm=` parameter) before you can use the `gen` command."
 
-    # Replace LLM Session with Alternated LLM Model Session
-    prev_llm_session = parser.llm_session
+    # Replace LLM, LLM Session with Alternated LLM Model and LLM Session
     if llm_alt_model is not None:
+        original_llm = parser.program.llm
+        original_llm_session = parser.llm_session
         if isinstance(llm_alt_model, str):
-            parser.llm_session = load_alt_model(llm_alt_model).session(asynchronous=True)
+            loaded_alt_model = load_alt_model(llm_alt_model)
+            parser.program.llm = loaded_alt_model
+            parser.llm_session = loaded_alt_model.session(asynchronous=True)
         else:
+            parser.program.llm = llm_alt_model
             parser.llm_session = llm_alt_model.session(asynchronous=True)
 
-    # call the LLM
-    gen_obj = await parser.llm_session(
-        variable_stack["@prefix"]+prefix, stop=stop, stop_regex=stop_regex, max_tokens=max_tokens, n=n, pattern=pattern,
-        temperature=temperature, top_p=top_p, logprobs=logprobs, cache_seed=cache_seed, token_healing=token_healing,
-        echo=parser.program.logprobs is not None, stream=stream, caching=parser.program.caching, function_call=function_call, **llm_kwargs
-    )
+    try:
+        # call the LLM
+        gen_obj = await parser.llm_session(
+            variable_stack["@prefix"]+prefix, stop=stop, stop_regex=stop_regex, max_tokens=max_tokens, n=n, pattern=pattern,
+            temperature=temperature, top_p=top_p, logprobs=logprobs, cache_seed=cache_seed, token_healing=token_healing,
+            echo=parser.program.logprobs is not None, stream=stream, caching=parser.program.caching, function_call=function_call, **llm_kwargs
+        )
 
-    if n == 1:
-        generated_value = prefix
-        variable_stack["@raw_prefix"] += prefix
-        logprobs_out = {}
-        if not isinstance(gen_obj, (types.AsyncGeneratorType, types.GeneratorType, list, tuple)):
-            gen_obj = [gen_obj]
-        if not isinstance(gen_obj, types.AsyncGeneratorType):
-            gen_obj = AsyncIter(gen_obj)
-        if list_append:
-            variable_stack[name] = variable_stack.get(name, [])
-            variable_stack[name].append("")
-            list_ind = len(variable_stack[name])-1
-            if logprobs:
-                variable_stack[name+"_logprobs"] = variable_stack.get(name+"_logprobs", [])
-                variable_stack[name+"_logprobs"].append([])
-                assert len(len(variable_stack[name])) == len(len(variable_stack[name+"_logprobs"]))
-        async for resp in gen_obj:
-            await asyncio.sleep(0) # allow other tasks to run
-            #log("parser.should_stop = " + str(parser.should_stop))
-            if parser.should_stop:
-                #log("Stopping generation")
-                break
-            # log.debug("resp", resp)
-            new_text = resp["choices"][0].get("text", "")
-            generated_value += new_text
-            variable_stack["@raw_prefix"] += new_text
-            if logprobs:
-                logprobs_out.update(resp["choices"][0]["logprobs"]["top_logprobs"])
+        if n == 1:
+            generated_value = prefix
+            variable_stack["@raw_prefix"] += prefix
+            logprobs_out = {}
+            if not isinstance(gen_obj, (types.AsyncGeneratorType, types.GeneratorType, list, tuple)):
+                gen_obj = [gen_obj]
+            if not isinstance(gen_obj, types.AsyncGeneratorType):
+                gen_obj = AsyncIter(gen_obj)
+            if list_append:
+                variable_stack[name] = variable_stack.get(name, [])
+                variable_stack[name].append("")
+                list_ind = len(variable_stack[name])-1
+                if logprobs:
+                    variable_stack[name+"_logprobs"] = variable_stack.get(name+"_logprobs", [])
+                    variable_stack[name+"_logprobs"].append([])
+                    assert len(len(variable_stack[name])) == len(len(variable_stack[name+"_logprobs"]))
+            async for resp in gen_obj:
+                await asyncio.sleep(0) # allow other tasks to run
+                #log("parser.should_stop = " + str(parser.should_stop))
+                if parser.should_stop:
+                    #log("Stopping generation")
+                    break
+                # log.debug("resp", resp)
+                new_text = resp["choices"][0].get("text", "")
+                generated_value += new_text
+                variable_stack["@raw_prefix"] += new_text
+                if logprobs:
+                    logprobs_out.update(resp["choices"][0]["logprobs"]["top_logprobs"])
+                if list_append:
+                    variable_stack[name][list_ind] = generated_value
+                    if logprobs:
+                        variable_stack[name+"_logprobs"][list_ind] = logprobs_out
+                elif name is not None:
+                    variable_stack[name] = generated_value
+                    if logprobs:
+                        variable_stack[name+"_logprobs"] = logprobs_out
+
+            # save the final stopping text if requested
+            if save_stop_text is not False:
+                if save_stop_text is True:
+                    save_stop_text = name+"_stop_text"
+                variable_stack[save_stop_text] = resp["choices"][0].get('stop_text', None)
+
+            if hasattr(gen_obj, 'close'):
+                gen_obj.close()
+            generated_value += suffix
+            variable_stack["@raw_prefix"] += suffix
             if list_append:
                 variable_stack[name][list_ind] = generated_value
-                if logprobs:
-                    variable_stack[name+"_logprobs"][list_ind] = logprobs_out
             elif name is not None:
                 variable_stack[name] = generated_value
-                if logprobs:
-                    variable_stack[name+"_logprobs"] = logprobs_out
-        
-        # save the final stopping text if requested
-        if save_stop_text is not False:
-            if save_stop_text is True:
-                save_stop_text = name+"_stop_text"
-            variable_stack[save_stop_text] = resp["choices"][0].get('stop_text', None)
-        
-        if hasattr(gen_obj, 'close'):
-            gen_obj.close()
-        generated_value += suffix
-        variable_stack["@raw_prefix"] += suffix
-        if list_append:
-            variable_stack[name][list_ind] = generated_value
-        elif name is not None:
-            variable_stack[name] = generated_value
 
-        if hidden:
-            new_content = variable_stack["@raw_prefix"][pos:]
-            variable_stack.pop()
-            variable_stack["@raw_prefix"] += "{{!--GHIDDEN:"+new_content.replace("--}}", "--_END_END")+"--}}"
-        
-        # stop executing if we were interrupted
-        if parser.should_stop:
-            parser.executing = False
-            parser.should_stop = False
-    else:
-        assert not isinstance(gen_obj, list), "Streaming is only supported for n=1"
-        generated_values = [prefix+choice["text"]+suffix for choice in gen_obj["choices"]]
-        if list_append:
-            value_list = variable_stack.get(name, [])
-            value_list.append(generated_values)
-            if logprobs:
-                logprobs_list = variable_stack.get(name+"_logprobs", [])
-                logprobs_list.append([choice["logprobs"]["top_logprobs"] for choice in gen_obj["choices"]])
-        elif name is not None:
-            variable_stack[name] = generated_values
-            if logprobs:
-                variable_stack[name+"_logprobs"] = [choice["logprobs"]["top_logprobs"] for choice in gen_obj["choices"]]
+            if hidden:
+                new_content = variable_stack["@raw_prefix"][pos:]
+                variable_stack.pop()
+                variable_stack["@raw_prefix"] += "{{!--GHIDDEN:"+new_content.replace("--}}", "--_END_END")+"--}}"
 
-        if not hidden:
-            # TODO: we could enable the parsing to branch into multiple paths here, but for now we just complete the program with the first prefix
-            generated_value = generated_values[0]
-
-            # echoing with multiple completions is not standard behavior
-            # this just uses the first generated value for completion and the rest as alternatives only used for the variable storage
-            # we mostly support this so that the echo=False hiding behavior does not make multiple outputs more complicated than it needs to be in the UX
-            # if echo:
-            #     variable_stack["@raw_prefix"] += generated_value
-            
-            id = uuid.uuid4().hex
-            l = len(generated_values)
-            out = "{{!--" + f"GMARKERmany_generate_start_{not hidden}_{l}${id}$" + "--}}"
-            for i, value in enumerate(generated_values):
-                if i > 1:
-                    out += "--}}"
-                if i > 0:
-                    out += "{{!--" + f"GMARKERmany_generate_{not hidden}_{i}${id}$" + "--}}{{!--G "
-                    out += escape_template_block(value)
-                else:
-                    out += value
-            variable_stack["@raw_prefix"] += out + "--}}{{!--" + f"GMARKERmany_generate_end${id}$" + "--}}"
-            # return "{{!--GMARKERmany_generate_start$$}}" + "{{!--GMARKERmany_generate$$}}".join([v for v in generated_values]) + "{{!--GMARKERmany_generate_end$$}}"
-            # return "".join([v for v in generated_values])
+            # stop executing if we were interrupted
+            if parser.should_stop:
+                parser.executing = False
+                parser.should_stop = False
         else:
-            # pop off the variable context we pushed since we are hidden
-            variable_stack.pop()
+            assert not isinstance(gen_obj, list), "Streaming is only supported for n=1"
+            generated_values = [prefix+choice["text"]+suffix for choice in gen_obj["choices"]]
+            if list_append:
+                value_list = variable_stack.get(name, [])
+                value_list.append(generated_values)
+                if logprobs:
+                    logprobs_list = variable_stack.get(name+"_logprobs", [])
+                    logprobs_list.append([choice["logprobs"]["top_logprobs"] for choice in gen_obj["choices"]])
+            elif name is not None:
+                variable_stack[name] = generated_values
+                if logprobs:
+                    variable_stack[name+"_logprobs"] = [choice["logprobs"]["top_logprobs"] for choice in gen_obj["choices"]]
 
-    # Restore previous llm session
-    if llm_alt_model is not None:
-        parser.llm_session = prev_llm_session
+            if not hidden:
+                # TODO: we could enable the parsing to branch into multiple paths here, but for now we just complete the program with the first prefix
+                generated_value = generated_values[0]
+
+                # echoing with multiple completions is not standard behavior
+                # this just uses the first generated value for completion and the rest as alternatives only used for the variable storage
+                # we mostly support this so that the echo=False hiding behavior does not make multiple outputs more complicated than it needs to be in the UX
+                # if echo:
+                #     variable_stack["@raw_prefix"] += generated_value
+
+                id = uuid.uuid4().hex
+                l = len(generated_values)
+                out = "{{!--" + f"GMARKERmany_generate_start_{not hidden}_{l}${id}$" + "--}}"
+                for i, value in enumerate(generated_values):
+                    if i > 1:
+                        out += "--}}"
+                    if i > 0:
+                        out += "{{!--" + f"GMARKERmany_generate_{not hidden}_{i}${id}$" + "--}}{{!--G "
+                        out += escape_template_block(value)
+                    else:
+                        out += value
+                variable_stack["@raw_prefix"] += out + "--}}{{!--" + f"GMARKERmany_generate_end${id}$" + "--}}"
+                # return "{{!--GMARKERmany_generate_start$$}}" + "{{!--GMARKERmany_generate$$}}".join([v for v in generated_values]) + "{{!--GMARKERmany_generate_end$$}}"
+                # return "".join([v for v in generated_values])
+            else:
+                # pop off the variable context we pushed since we are hidden
+                variable_stack.pop()
+
+    finally:
+        # Ensure the original LLM and session are restored
+        if llm_alt_model is not None:
+            parser.program.llm = original_llm
+            parser.llm_session = original_llm_session

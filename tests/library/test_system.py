@@ -1,5 +1,6 @@
 from promptitude import guidance
 
+
 def test_system():
     """ Basic test of `system`.
     """
