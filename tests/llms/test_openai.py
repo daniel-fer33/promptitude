@@ -197,6 +197,6 @@ class TestOpenAISerialization(unittest.TestCase):
         self.assertEqual(new_openai_instance.chat_mode, openai_instance.chat_mode)
         self.assertEqual(new_openai_instance.organization, openai_instance.organization)
         self.assertEqual(new_openai_instance.rest_call, openai_instance.rest_call)
-        self.assertEqual(new_openai_instance.allowed_special_tokens, openai_instance.allowed_special_tokens)
+        self.assertEqual(new_openai_instance._allowed_special_tokens, openai_instance._allowed_special_tokens)
         self.assertEqual(new_openai_instance.endpoint, openai_instance.endpoint)
         self.assertEqual(new_openai_instance._encoding_name, openai_instance._encoding_name)
