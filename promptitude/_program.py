@@ -12,7 +12,7 @@ import os
 import time
 import datetime
 import nest_asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, fields
 import importlib
 
 import promptitude
@@ -37,6 +37,22 @@ class ProgramState:
     attributes: Dict
     variables: Dict
     text: str
+
+    def to_dict(self) -> Dict:
+        """Converts the ProgramState instance to a dictionary."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'ProgramState':
+        """Creates an instance of ProgramState from a dictionary."""
+        field_names = {field.name for field in fields(cls)}
+        # Missing fields
+        missing_fields = [s1 for s1 in field_names if s1 not in data.keys()]
+        # Unused keys
+        unused_fields = [s1 for s1 in data.keys() if s1 not in field_names]
+        if len(missing_fields) > 0 or len(unused_fields) > 0:
+            raise ValueError(f"Missing fields: {missing_fields}. Unused fields: {unused_fields}")
+        return cls(**data)
 
 
 class Log:

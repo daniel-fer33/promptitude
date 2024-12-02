@@ -21,6 +21,8 @@ class Transformers(LLM):
     excluded_args: List[str] = []
     class_attribute_map: Dict[str, str] = {
         'model': 'model_name',
+        'tokenizer': '_init_tokenizer_arg',
+        'device': '_init_device_arg'
     }
 
     def __init__(self, model=None, tokenizer=None, caching=True, token_healing=True, acceleration=True, \
@@ -37,6 +39,8 @@ class Transformers(LLM):
             except:
                 pass
 
+        self._init_tokenizer_arg = tokenizer
+        self._init_device_arg = device
         self.model_obj, self.tokenizer = self._model_and_tokenizer(model, tokenizer, **kwargs)
 
         self.model_name = model if isinstance(model, str) else model.__class__.__name__

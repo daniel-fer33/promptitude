@@ -1,6 +1,11 @@
+import copy
+import json
+
 from promptitude import guidance
+from promptitude.guidance import ProgramState
 import pytest
 from .utils import get_llm
+
 
 def test_chat_stream():
     """ Test the behavior of `stream=True` for an openai chat endpoint.
@@ -280,3 +285,28 @@ def test_initial_state_partial_execution(llm):
     assert final_program['response'] == "Paris"
     assert "Let me think about it." not in str(final_program)
     assert "The answer is: Paris" in str(final_program)
+
+
+@pytest.mark.parametrize("llm", ["transformers:gpt2", "openai:gpt-4o-mini", "anthropic:claude-3-haiku-20240307"])
+def test_program_state(llm):
+    llm = get_llm(llm)
+
+    program = guidance(""" Program """, llm=llm)
+    state = program.state
+    state_dict = state.to_dict()
+    assert isinstance(state_dict, dict)
+
+    # Correct loading form dict
+    alt_state_dict = copy.deepcopy(state_dict)
+    alt_state = ProgramState.from_dict(alt_state_dict)
+    assert state_dict == alt_state.to_dict()
+    # Ensure json serialization
+    json.dumps(state_dict)
+
+    # Errors
+    deleted_field = list(state_dict.keys())[0]
+    del alt_state_dict[deleted_field]
+    alt_state_dict.update({'non_existing': 'value'})
+    with pytest.raises(ValueError) as exc_info:
+        alt_state = ProgramState.from_dict(alt_state_dict)
+    assert str(exc_info.value) == f"Missing fields: ['{deleted_field}']. Unused fields: ['non_existing']"
