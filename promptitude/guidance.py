@@ -5,7 +5,7 @@ import sys
 import os
 import requests
 from . import library as commands
-from ._program import Program
+from ._program import Program, ProgramState
 from . import llms
 
 from ._utils import load, chain
