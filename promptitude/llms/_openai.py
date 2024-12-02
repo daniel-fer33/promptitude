@@ -147,7 +147,8 @@ class OpenAI(LLM):
     excluded_args: List[str] = ['token', 'api_key']
     class_attribute_map: Dict[str, str] = {
         'model': 'model_name',
-        'encoding_name': '_encoding_name'
+        'encoding_name': '_encoding_name',
+        'allowed_special_tokens': '_allowed_special_tokens'
     }
 
     def __init__(self, model=None, caching=True, max_retries=5, max_calls_per_min=60,
