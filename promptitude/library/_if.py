@@ -61,7 +61,7 @@ async def if_(value: Any, *, invert: bool = False, _parser_context: Union[Dict, 
         # elif block
         if block_content[i][0] == "elif":
             elif_condition = await parser.visit(block_content[i][1], variable_stack)
-            if elif_condition:
+            if elif_condition.value:
                 return await parser.visit(block_content[i + 1], variable_stack)
 
         # else block
