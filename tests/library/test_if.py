@@ -52,8 +52,30 @@ def test_if_complex_blockwith_else():
 def test_elif_else():
     """ Test the behavior of `if` with an `else` clause.
     """
+    prompt = """Answer 'Yes' or 'No': '{{#if flag}}Yes{{elif flag2}}maybe{{else}}No{{/if}}'"""
 
-    prompt = guidance("""Answer 'Yes' or 'No': '{{#if flag}}Yes{{elif flag2}}maybe{{else}}No{{/if}}'""")
+    program = guidance(prompt)
+    out = program(flag=True, flag2=True)
+    assert str(out) == "Answer 'Yes' or 'No': 'Yes'"
 
-    out = prompt(flag=False, flag2=True)
+    program = guidance(prompt)
+    out = program(flag=True, flag2=False)
+    assert str(out) == "Answer 'Yes' or 'No': 'Yes'"
+
+    program = guidance(prompt)
+    out = program(flag=False, flag2=True)
     assert str(out) == "Answer 'Yes' or 'No': 'maybe'"
+
+    program = guidance(prompt)
+    out = program(flag=False, flag2=False)
+    assert str(out) == "Answer 'Yes' or 'No': 'No'"
+
+    prompt = """Answer 'Yes' or 'No': '{{#if flag}}Yes{{elif flag2}}maybe{{elif flag3}}No way!{{else}}I dont' know{{/if}}'"""
+
+    program = guidance(prompt)
+    out = program(flag=False, flag2=False, flag3=True)
+    assert str(out) == "Answer 'Yes' or 'No': 'No way!'"
+
+    program = guidance(prompt)
+    out = program(flag=False, flag2=False, flag3=False)
+    assert str(out) == "Answer 'Yes' or 'No': 'I dont' know'"
