@@ -817,7 +817,7 @@ class MSALOpenAI(OpenAI):
 
         from msal import PublicClientApplication, SerializableTokenCache
         self._token_cache = SerializableTokenCache()
-        self._token_cache_path = os.path.join(platformdirs.user_cache_dir("guidance"), "_azure_openai.token")
+        self._token_cache_path = os.path.join(platformdirs.user_cache_dir("promptitude"), "_azure_openai.token")
         self._app = PublicClientApplication(client_id=self.client_id, authority=self.authority, token_cache=self._token_cache)
         if os.path.exists(self._token_cache_path):
             self._token_cache.deserialize(open(self._token_cache_path, 'r').read())

@@ -20,7 +20,7 @@ class GPTCache(Cache):
             cache_obj = Cache()
             init_similar_cache(
                 data_dir=os.path.join(
-                    platformdirs.user_cache_dir("guidance"), f"_{cache}.gptcache"
+                    platformdirs.user_cache_dir("promptitude"), f"_{cache}.gptcache"
                 ),
                 cache_obj=cache_obj,
             )
