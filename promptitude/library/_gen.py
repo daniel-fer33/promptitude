@@ -7,18 +7,10 @@ import logging
 import types
 
 from promptitude import llms
+from promptitude.llms import get_llm_from_model_name
 from .._utils import escape_template_block, AsyncIter
 
 log = logging.getLogger(__name__)
-
-
-def load_alt_model(model_name: str) -> llms.LLM:
-    if model_name.startswith("gpt-") or model_name.startswith("o1-"):
-        return llms.OpenAI(model_name, caching=False)
-    elif model_name.startswith("claude-"):
-        return llms.Anthropic(model_name, caching=False)
-    else:
-        return llms.Transformers(model_name, device='cpu', caching=False)
 
 
 async def gen(name: Union[str, None] = None,
@@ -209,7 +201,7 @@ async def gen(name: Union[str, None] = None,
         original_llm = parser.program.llm
         original_llm_session = parser.llm_session
         if isinstance(llm_alt_model, str):
-            loaded_alt_model = load_alt_model(llm_alt_model)
+            loaded_alt_model = get_llm_from_model_name(llm_alt_model)
             parser.program.llm = loaded_alt_model
             parser.llm_session = loaded_alt_model.session(asynchronous=True)
         else:
