@@ -871,8 +871,10 @@ _built_ins = {
     "UNARY_OPERATOR_not": commands.not_,
     "assert": commands.assert_,
     "UNARY_OPERATOR_-": commands.negate,
-    "raise": commands.raise_
+    "raise": commands.raise_,
+    "exists": commands.exists
 }
+
 
 class DisplayThrottler():
     def __init__(self, display_function, throttle_limit):
