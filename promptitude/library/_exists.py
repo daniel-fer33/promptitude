@@ -23,6 +23,17 @@ def exists(name: str, check_nested: bool = False, _parser_context: Union[Dict, N
     -------
     bool
         True if the variable exists, False otherwise.
+
+    Examples
+    --------
+    Use within a guidance template:
+
+    >>> import promptitude
+    >>> guidance = promptitude.guidance
+    >>> program = guidance("{{#if (exists 'variable')}}Variable exists{{else}}Variable does not exist{{/if}}")
+    >>> output = program(variable='some value')
+    >>> print(output)
+    Variable exists
     """
     if not isinstance(name, str):
         raise TypeError(f"'name' must be of type str, got {type(name)}.")
