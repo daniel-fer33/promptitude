@@ -4,13 +4,14 @@ import re
 import json
 import inspect
 import threading
+from abc import ABCMeta, abstractmethod
 
 from promptitude import guidance
 
 from .caches import DiskCache
 
 
-class LLMMeta(type):
+class LLMMeta(ABCMeta):
     """ Metaclass for LLM classes to manage a shared DiskCache instance. """
 
     def __init__(cls, name, bases, namespace, **kwargs):
@@ -99,16 +100,18 @@ type {{function.name}} = (_: {
         else:
             return SyncSession(LLMSession(self))
 
-    def encode(self, string, **kwargs):
-        return self._tokenizer.encode(string, **kwargs)
+    @abstractmethod
+    def encode(self, string: str, **kwargs) -> List[int]:
+        pass
 
-    def decode(self, tokens, **kwargs):
-        return self._tokenizer.decode(tokens, **kwargs)
-    
-    def id_to_token(self, id):
+    @abstractmethod
+    def decode(self, tokens: List[int], **kwargs) -> str:
+        pass
+
+    def id_to_token(self, id: int) -> str:
         return self.decode([id])
 
-    def token_to_id(self, token):
+    def token_to_id(self, token: str) -> int:
         return self.encode(token)[0]
     
     # allow for caches to be get and set on the object as well as the class

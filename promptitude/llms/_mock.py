@@ -68,7 +68,14 @@ class Mock(LLM):
     
     def role_end(self, role_name=None):
         return "<|im_end|>"
-    
+
+    def encode(self, string, **kwargs):
+        return self._tokenizer.encode(string)
+
+    def decode(self, tokens, **kwargs):
+        return self._tokenizer.decode(tokens)
+
+
 class MockTokenizer():
     def __init__(self):
         pass
