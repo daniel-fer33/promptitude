@@ -1,24 +1,34 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import asyncio
 import re
 import json
 import inspect
+import threading
 
 from promptitude import guidance
 
 from .caches import DiskCache
 
+
 class LLMMeta(type):
-    def __init__(cls, *args, **kwargs):
+    """ Metaclass for LLM classes to manage a shared DiskCache instance. """
+
+    def __init__(cls, name, bases, namespace, **kwargs):
+        super().__init__(name, bases, namespace)
         cls._cache = None
+        cls._lock = threading.Lock()
+
     @property
-    def cache(cls):
-        if cls._cache is None:
-            cls._cache = DiskCache(cls.llm_name)
+    def cache(cls) -> DiskCache:
+        with cls._lock:
+            if cls._cache is None:
+                cls._cache = DiskCache(cls.llm_name)
         return cls._cache
+
     @cache.setter
-    def cache(cls, value):
-        cls._cache = value
+    def cache(cls, value: DiskCache) -> None:
+        with cls._lock:
+            cls._cache = value
 
 
 class LLM(metaclass=LLMMeta):
