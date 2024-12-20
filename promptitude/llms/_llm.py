@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 import asyncio
 import re
 import json
@@ -174,20 +174,28 @@ class LLMSession:
 
 
 class SyncSession:
-    def __init__(self, session):
+    def __init__(self, session: LLMSession) -> None:
         self._session = session
 
-    def __enter__(self):
+    def __enter__(self) -> 'SyncSession':
         self._session.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
         return self._session.__exit__(exc_type, exc_value, traceback)
 
-    def __call__(self, *args, **kwargs):
-        return asyncio.get_event_loop().run_until_complete(
-            self._session.__call__(*args, **kwargs)
-        )
+    def __call__(self, *args, **kwargs) -> Any:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(self._session.__call__(*args, **kwargs))
+        else:
+            # If the event loop is already running, schedule the coroutine and wait for it
+            future = asyncio.ensure_future(self._session.__call__(*args, **kwargs))
+            return loop.run_until_complete(future)
+
 
 class CallableAnswer:
     def __init__(self, name, args_string, function=None):
