@@ -75,15 +75,8 @@ type {{function.name}} = (_: {
         if m:
             return CallableAnswer(m.group(1), m.group(2))
 
-    def __call__(self, *args, asynchronous=False, **kwargs):
-        """Creates a session and calls the LLM with the given arguments.
-
-        Note that this is a convenience wrapper so you don't have to call session(),
-        for higher performance across multiple calls, use a session directly.
-        """
-        with self.session(asynchronous=asynchronous) as s:
-            out = s(*args, **kwargs)
-        return out
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError("LLM subclasses must implement the __call__ method.")
 
     def __getitem__(self, key):
         """Gets an attribute from the LLM."""
