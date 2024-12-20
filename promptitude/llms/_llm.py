@@ -15,7 +15,11 @@ from .caches import DiskCache
 
 
 class LLMMeta(ABCMeta):
-    """ Metaclass for LLM classes to manage a shared DiskCache instance. """
+    """ Metaclass for LLM classes to manage a shared DiskCache instance.
+
+    Ensures that all instances of an LLM subclass share the same cache,
+    facilitating caching across different instances.
+    """
 
     def __init__(cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs) -> None:
         super().__init__(name, bases, namespace)
@@ -36,7 +40,11 @@ class LLMMeta(ABCMeta):
 
 
 class LLM(metaclass=LLMMeta):
-    cache_version: int = 1
+    """ Base class for Language Model interfaces.
+
+    Provides a common interface and shared functionality for different LLM implementations.
+    """
+    cache_version: int = 1  # Version of the cache to handle cache invalidation when the class implementation changes.
     default_system_prompt: str = "You are a helpful assistant."
     llm_name: str = "unknown"
 
@@ -72,13 +80,8 @@ type {{function.name}} = (_: {
 {{~/if~}}""", functions=[])
         self.function_call_stop_regex = r"\n?\n?```typescript\nfunctions.[^\(]+\(.*?\)```"
 
-    def extract_function_call(self, text: str) -> Optional[CallableAnswer]:
-        m = re.match(r"\n?\n?```typescript\nfunctions.([^\(]+)\((.*?)\)```", text, re.DOTALL)
-
-        if m:
-            return CallableAnswer(m.group(1), m.group(2))
-
     def __call__(self, *args, **kwargs) -> Any:
+        """Generates a response from the LLM. Subclasses must implement this method."""
         raise NotImplementedError("LLM subclasses must implement the __call__ method.")
 
     def __getitem__(self, key: str) -> Any:
@@ -96,12 +99,21 @@ type {{function.name}} = (_: {
         else:
             return SyncSession(LLMSession(self))
 
+    @staticmethod
+    def extract_function_call(text: str) -> Optional[CallableAnswer]:
+        """Extracts a callable function from the LLM's output, if any."""
+        m = re.match(r"\n?\n?```typescript\nfunctions.([^\(]+)\((.*?)\)```", text, re.DOTALL)
+        if m:
+            return CallableAnswer(m.group(1), m.group(2))
+
     @abstractmethod
     def encode(self, string: str, **kwargs) -> List[int]:
+        """Abstract method to encode a string into tokens. Must be implemented by subclasses."""
         pass
 
     @abstractmethod
     def decode(self, tokens: List[int], **kwargs) -> str:
+        """Abstract method to decode tokens into a string. Must be implemented by subclasses."""
         pass
 
     def id_to_token(self, id: int) -> str:
@@ -123,6 +135,7 @@ type {{function.name}} = (_: {
         self._cache = value
 
     def serialize(self) -> Dict[str, Any]:
+        """Serializes the LLM instance for caching or storage purposes"""
         excluded_args = set(self.excluded_args)
         class_attribute_map = self.class_attribute_map
         init_params = inspect.signature(self.__init__).parameters
@@ -139,6 +152,12 @@ type {{function.name}} = (_: {
 
 
 class LLMSession:
+    """Asynchronous session class for interacting with the LLM.
+
+    Manages stateful interactions with the LLM, such as tracking call counts
+    for non-zero temperature requests, and caching considerations.
+    """
+
     def __init__(self, llm: LLM) -> None:
         self.llm = llm
         self._call_counts: Dict = {}  # tracks the number of repeated identical calls to the LLM with non-zero temperature
@@ -154,13 +173,14 @@ class LLMSession:
         pass
 
     def _gen_key(self, args_dict: Dict[str, Any]) -> str:
+        """Generates a unique key for caching based on the arguments."""
         del args_dict["self"]  # skip the "self" arg
         return "_---_".join([str(v) for v in (
-                    [args_dict[k] for k in args_dict] + [self.llm.model_name, self.llm.__class__.__name__,
-                                                         self.llm.cache_version])])
+                [args_dict[k] for k in args_dict] + [self.llm.model_name, self.llm.__class__.__name__,
+                                                     self.llm.cache_version])])
 
     def _cache_params(self, args_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """get the parameters for generating the cache key"""
+        """Prepares cache parameters, including call counts for non-deterministic outputs."""
         key = self._gen_key(args_dict)
         # if we have non-zero temperature we include the call count in the cache key
         if args_dict.get("temperature", 0) > 0:
@@ -176,6 +196,8 @@ class LLMSession:
 
 
 class SyncSession:
+    """Synchronous wrapper for LLMSession."""
+
     def __init__(self, session: LLMSession) -> None:
         self._session = session
 
@@ -201,6 +223,8 @@ class SyncSession:
 
 
 class CallableAnswer:
+    """Represents a callable function extracted from the LLM's output."""
+
     def __init__(self, name: str, args_string: str, function: Optional[Any] = None) -> None:
         self.__name__: str = name
         self.args_string: str = args_string
@@ -213,7 +237,8 @@ class CallableAnswer:
 
     @property
     def __kwdefaults__(self) -> Dict[str, Any]:
-        """We build this lazily in case the user wants to handle validation errors themselves."""
+        """Parses and returns the default keyword arguments from the arguments string."""
+        # We build this lazily in case the user wants to handle validation errors themselves.
         return json.loads(self.args_string)
 
     def __repr__(self) -> str:
