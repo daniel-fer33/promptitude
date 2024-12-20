@@ -1,4 +1,7 @@
-from typing import Any, Dict, List, Optional, Union
+from __future__ import annotations
+from typing import Any, Dict, List, Optional, Union, Type
+from types import TracebackType
+
 import asyncio
 import re
 import json
@@ -14,7 +17,7 @@ from .caches import DiskCache
 class LLMMeta(ABCMeta):
     """ Metaclass for LLM classes to manage a shared DiskCache instance. """
 
-    def __init__(cls, name, bases, namespace, **kwargs):
+    def __init__(cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs) -> None:
         super().__init__(name, bases, namespace)
         cls._cache = None
         cls._lock = threading.Lock()
@@ -33,15 +36,15 @@ class LLMMeta(ABCMeta):
 
 
 class LLM(metaclass=LLMMeta):
-    cache_version = 1
-    default_system_prompt = "You are a helpful assistant."
+    cache_version: int = 1
+    default_system_prompt: str = "You are a helpful assistant."
     llm_name: str = "unknown"
 
     # Serialization
     excluded_args: List[str] = []
     class_attribute_map: Dict[str, str] = {}
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.chat_mode = False  # by default models are not in role-based chat mode
         self.model_name = "unknown"
 
@@ -69,20 +72,20 @@ type {{function.name}} = (_: {
 {{~/if~}}""", functions=[])
         self.function_call_stop_regex = r"\n?\n?```typescript\nfunctions.[^\(]+\(.*?\)```"
 
-    def extract_function_call(self, text):
+    def extract_function_call(self, text: str) -> Optional[CallableAnswer]:
         m = re.match(r"\n?\n?```typescript\nfunctions.([^\(]+)\((.*?)\)```", text, re.DOTALL)
 
         if m:
             return CallableAnswer(m.group(1), m.group(2))
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> Any:
         raise NotImplementedError("LLM subclasses must implement the __call__ method.")
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         """Gets an attribute from the LLM."""
         return getattr(self, key)
 
-    def session(self, asynchronous=False):
+    def session(self, asynchronous: bool = False) -> Union[LLMSession, SyncSession]:
         """Creates a session for the LLM.
 
         This implementation is meant to be overridden by subclasses.
@@ -106,20 +109,20 @@ type {{function.name}} = (_: {
 
     def token_to_id(self, token: str) -> int:
         return self.encode(token)[0]
-    
+
     # allow for caches to be get and set on the object as well as the class
     @property
-    def cache(self):
+    def cache(self) -> DiskCache:
         if self._cache is not None:
             return self._cache
         else:
             return self.__class__.cache
 
     @cache.setter
-    def cache(self, value):
+    def cache(self, value: DiskCache) -> None:
         self._cache = value
 
-    def serialize(self) -> Dict:
+    def serialize(self) -> Dict[str, Any]:
         excluded_args = set(self.excluded_args)
         class_attribute_map = self.class_attribute_map
         init_params = inspect.signature(self.__init__).parameters
@@ -136,24 +139,27 @@ type {{function.name}} = (_: {
 
 
 class LLMSession:
-    def __init__(self, llm):
+    def __init__(self, llm: LLM) -> None:
         self.llm = llm
-        self._call_counts = {} # tracks the number of repeated identical calls to the LLM with non-zero temperature
+        self._call_counts: Dict = {}  # tracks the number of repeated identical calls to the LLM with non-zero temperature
 
-    def __enter__(self):
+    def __enter__(self) -> LLMSession:
         return self
 
-    async def __call__(self, *args, **kwargs):
+    async def __call__(self, *args, **kwargs) -> Any:
         return self.llm(*args, **kwargs)
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException],
+                 traceback: Optional[TracebackType]) -> Optional[bool]:
         pass
 
-    def _gen_key(self, args_dict):
+    def _gen_key(self, args_dict: Dict[str, Any]) -> str:
         del args_dict["self"]  # skip the "self" arg
-        return "_---_".join([str(v) for v in ([args_dict[k] for k in args_dict] + [self.llm.model_name, self.llm.__class__.__name__, self.llm.cache_version])])
+        return "_---_".join([str(v) for v in (
+                    [args_dict[k] for k in args_dict] + [self.llm.model_name, self.llm.__class__.__name__,
+                                                         self.llm.cache_version])])
 
-    def _cache_params(self, args_dict) -> Dict[str, Any]:
+    def _cache_params(self, args_dict: Dict[str, Any]) -> Dict[str, Any]:
         """get the parameters for generating the cache key"""
         key = self._gen_key(args_dict)
         # if we have non-zero temperature we include the call count in the cache key
@@ -173,11 +179,12 @@ class SyncSession:
     def __init__(self, session: LLMSession) -> None:
         self._session = session
 
-    def __enter__(self) -> 'SyncSession':
+    def __enter__(self) -> SyncSession:
         self._session.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException],
+                 traceback: Optional[TracebackType]) -> Optional[bool]:
         return self._session.__exit__(exc_type, exc_value, traceback)
 
     def __call__(self, *args, **kwargs) -> Any:
@@ -199,7 +206,7 @@ class CallableAnswer:
         self.args_string: str = args_string
         self._function: Optional[Any] = function
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> Any:
         if self._function is None:
             raise NotImplementedError(f"Answer {self.__name__} has no function defined")
         return self._function(*args, **self.__kwdefaults__, **kwargs)
