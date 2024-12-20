@@ -1,10 +1,12 @@
+from typing import Any, Optional, Union, List, Dict
+
 from ._llm import LLM
 
-class Mock(LLM):
-    """ Mock class for testing.
-    """
 
-    def __init__(self, output=None):
+class Mock(LLM):
+    """Mock class for testing."""
+
+    def __init__(self, output: Optional[Union[str, List[Any], Dict[str, Any]]] = None) -> None:
         """ Initialize the mock class.
         
         Parameters
@@ -19,7 +21,7 @@ class Mock(LLM):
         """
         super().__init__()
 
-        # make sure the output is always a dictionary of lists
+        # Ensure the output is always a dictionary of lists
         if output is None:
             output = {"": [f"mock output {i}" for i in range(100)]}
         if isinstance(output, str):
@@ -29,32 +31,32 @@ class Mock(LLM):
         for key in output.keys():
             if not isinstance(output[key], list):
                 output[key] = [output[key]]
-        
-        self.output = output
-        self.counts = {k: 0 for k in output.keys()}
+
+        self.output: Dict[str, List[Any]] = output
+        self.counts: Dict[str, int] = {k: 0 for k in output.keys()}
+        self._sorted_keys: List[str] = sorted(self.output.keys(), key=lambda k: len(k), reverse=True)
         self._tokenizer = MockTokenizer()
 
-    def _find_suffix_match(self, prompt):
-        """ Find the output key that matches the suffix of the prompt.
-        """
-
-        for key in self.output.keys():
-            if prompt.endswith(key):
-                return key
-
-    def __call__(self, prompt, *args, n=1, stream=False, **kwargs):
+    def __call__(
+        self,
+        prompt: str,
+        *args: Any,
+        n: int = 1,
+        stream: bool = False,
+        **kwargs: Any
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         key = self._find_suffix_match(prompt)
-        output = self.output[key]
+        output_list = self.output[key]
         choices = []
         for i in range(n):
-            out = output[min(self.counts[key], len(output)-1)]
+            out = output_list[min(self.counts[key], len(output_list) - 1)]
             self.counts[key] += 1
             if isinstance(out, str):
                 choices.append({"text": out, "finish_reason": "stop"})
             elif isinstance(out, dict):
                 choices.append(out)
             else:
-                raise ValueError("Invalid output type: " + str(type(out)))
+                raise ValueError(f"Invalid output type: {type(out)}")
 
         out = {"choices": choices}
 
@@ -62,26 +64,36 @@ class Mock(LLM):
             return [out]
         else:
             return out
-        
-    def role_start(self, role_name, **kwargs):
-        return "<|im_start|>"+role_name+"".join([f' {k}="{v}"' for k,v in kwargs.items()])+"\n"
-    
-    def role_end(self, role_name=None):
+
+    def role_start(self, role_name: str, **kwargs: Any) -> str:
+        attributes = "".join([f' {k}="{v}"' for k, v in kwargs.items()])
+        return f"<|im_start|>{role_name}{attributes}\n"
+
+    def role_end(self, role_name: Optional[str] = None) -> str:
         return "<|im_end|>"
 
-    def encode(self, string, **kwargs):
+    def encode(self, string: str, **kwargs: Any) -> List[int]:
         return self._tokenizer.encode(string)
 
-    def decode(self, tokens, **kwargs):
+    def decode(self, tokens: List[int], **kwargs: Any) -> str:
         return self._tokenizer.decode(tokens)
 
+    def _find_suffix_match(self, prompt: str) -> str:
+        """Find the output key that matches the longest suffix of the prompt."""
+        for key in self._sorted_keys:
+            if prompt.endswith(key):
+                return key
+        return ""
 
-class MockTokenizer():
-    def __init__(self):
+
+class MockTokenizer:
+    def __init__(self) -> None:
         pass
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text: str) -> List[int]:
         return [s for s in text.encode("utf-8")]
-    
-    def decode(self, ids):
+
+    @staticmethod
+    def decode(ids: List[int]) -> str:
         return "".join([chr(i) for i in ids])
