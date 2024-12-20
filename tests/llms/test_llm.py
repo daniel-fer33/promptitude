@@ -37,7 +37,7 @@ class TestLLM(unittest.TestCase):
         llm = DummyLLM()
         self.assertEqual(llm.llm_name, "dummy")
         self.assertEqual(llm.model_name, "dummy-model")
-        self.assertFalse(llm.chat_mode)
+        self.assertTrue(llm.chat_mode)
 
     def test_llm_call(self):
         """Test the LLM call method."""

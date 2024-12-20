@@ -53,7 +53,7 @@ class LLM(metaclass=LLMMeta):
     class_attribute_map: Dict[str, str] = {}
 
     def __init__(self) -> None:
-        self.chat_mode = False  # by default models are not in role-based chat mode
+        self.chat_mode = True  # by default models are in role-based chat mode
         self.model_name = "unknown"
 
         # these should all start with the @ symbol and are variables programs can use when running with this LLM
