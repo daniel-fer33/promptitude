@@ -198,19 +198,20 @@ class SyncSession:
 
 
 class CallableAnswer:
-    def __init__(self, name, args_string, function=None):
-        self.__name__ = name
-        self.args_string = args_string
+    def __init__(self, name: str, args_string: str, function: Optional[Any] = None) -> None:
+        self.__name__: str = name
+        self.args_string: str = args_string
+        self._function: Optional[Any] = function
 
     def __call__(self, *args, **kwargs):
         if self._function is None:
             raise NotImplementedError(f"Answer {self.__name__} has no function defined")
         return self._function(*args, **self.__kwdefaults__, **kwargs)
-    
+
     @property
-    def __kwdefaults__(self):
+    def __kwdefaults__(self) -> Dict[str, Any]:
         """We build this lazily in case the user wants to handle validation errors themselves."""
         return json.loads(self.args_string)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"CallableAnswer(__name__={self.__name__}, __kwdefaults__={self.__kwdefaults__})"
