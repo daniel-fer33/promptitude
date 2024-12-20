@@ -1,4 +1,4 @@
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 import inspect
 import re
 import html
@@ -36,7 +36,7 @@ class ProgramState:
     serialized_llm: Union[Dict, None]
     attributes: Dict
     variables: Dict
-    text: str
+    text: Optional[str]
 
     def to_dict(self) -> Dict:
         """Converts the ProgramState instance to a dictionary."""
