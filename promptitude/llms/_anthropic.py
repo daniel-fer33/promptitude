@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import random
 import aiohttp
@@ -16,6 +16,7 @@ import regex
 import logging
 
 from ._llm import LLM, LLMSession, SyncSession
+from ._api_llm import APILLM
 
 log = logging.getLogger(__name__)
 
@@ -156,30 +157,29 @@ def merge_stream_chunks(first_chunk, second_chunk):
     return out
 
 
-class Anthropic(LLM):
+class Anthropic(APILLM):
     llm_name: str = "anthropic"
 
+    # API
+    _api_exclude_arguments: Optional[List[str]] = [
+        'organization', 'deployment_id'
+    ]
+    _api_rename_arguments: Optional[Dict[str, str]] = {}
+
     # Serialization
-    excluded_args: List[str] = ['api_key']
+    excluded_args: List[str] = ['api_key', 'api_type']
     class_attribute_map: Dict[str, str] = {
         'model': 'model_name',
     }
 
-    def __init__(self, model=None, caching=True, max_retries=5, max_calls_per_min=60,
-                 api_key=None, api_type="anthropic", api_base=None, api_version=None,
-                 temperature=0.0, rest_call=False,
-                 allowed_special_tokens=None):
-        super().__init__()
+    def __init__(
+            self,
+            model=None,
+            api_key=None,
+            **kwargs
+    ):
 
-        # fill in default model value
-        if model is None:
-            model = os.environ.get("ANTHROPIC_MODEL", None)
-        if model is None:
-            try:
-                with open(os.path.expanduser('~/.anthropic_model'), 'r') as file:
-                    model = file.read().replace('\n', '')
-            except:
-                pass
+        api_type = "anthropic"
 
         # fill in default API key value
         if api_key is None:  # get from environment variable
@@ -194,50 +194,33 @@ class Anthropic(LLM):
                     api_key = file.read().replace('\n', '')
             except:
                 pass
-
-        self._tokenizer = anthropic.Client().beta.messages.count_tokens
-        self.chat_mode = True  # Only Anthropic chat-mode is currently supported
-
-        self.allowed_special_tokens = allowed_special_tokens
-        self.model_name = model
-        self.caching = caching
-        self.max_retries = max_retries
-        self.max_calls_per_min = max_calls_per_min
         if isinstance(api_key, str):
             api_key = api_key.replace("Bearer ", "")
-        self.api_key = api_key
-        self.api_type = api_type
-        self.api_base = api_base
-        self.api_version = api_version
-        self.current_time = time.time()
-        self.call_history = collections.deque()
-        self.temperature = temperature
-        self.rest_call = rest_call
 
-        if not self.rest_call:
-            self.caller = self._library_call
-        else:
-            self.caller = self._rest_call
-            self._rest_headers = {
-                "Content-Type": "application/json"
-            }
+        # fill in default model value
+        if model is None:
+            model = os.environ.get("ANTHROPIC_MODEL", None)
+        if model is None:
+            try:
+                with open(os.path.expanduser('~/.anthropic_model'), 'r') as file:
+                    model = file.read().replace('\n', '')
+            except:
+                pass
+
+        super().__init__(
+            model=model, api_key=api_key, api_type=api_type, **kwargs
+        )
+
+        # Tokenizer
+        self._tokenizer = anthropic.Client().beta.messages.count_tokens
+
+        self.chat_mode = True  # Only Anthropic chat-mode will be supported
 
     def session(self, asynchronous=False):
         if asynchronous:
             return AnthropicSession(self)
         else:
             return SyncSession(AnthropicSession(self))
-
-    def role_start(self, role_name, **kwargs):
-        assert self.chat_mode, "role_start() can only be used in chat mode"
-        return "<|im_start|>" + role_name + "".join([f' {k}="{v}"' for k, v in kwargs.items()]) + "\n"
-
-    def role_end(self, role=None):
-        assert self.chat_mode, "role_end() can only be used in chat mode"
-        return "<|im_end|>"
-
-    def end_of_text(self):
-        return "<|endoftext|>"
 
     @classmethod
     async def stream_then_save(cls, gen, key, stop_regex, n):
@@ -334,23 +317,6 @@ class Anthropic(LLM):
 
         cls.cache[key] = list_out
 
-    # Define a function to add a call to the deque
-    def add_call(self):
-        # Get the current timestamp in seconds
-        now = time.time()
-        # Append the timestamp to the right of the deque
-        self.call_history.append(now)
-
-    # Define a function to count the calls in the last 60 seconds
-    def count_calls(self):
-        # Get the current timestamp in seconds
-        now = time.time()
-        # Remove the timestamps that are older than 60 seconds from the left of the deque
-        while self.call_history and self.call_history[0] < now - 60:
-            self.call_history.popleft()
-        # Return the length of the deque as the number of calls
-        return len(self.call_history)
-
     async def _library_call(self, **kwargs):
         """ Call the Anthropic API using the python package."""
         assert self.api_key is not None, "You must provide an Anthropic API key to use the Anthropic LLM. " \
@@ -383,11 +349,11 @@ class Anthropic(LLM):
     async def _rest_stream_handler(self, responses):
         raise NotImplementedError
 
-    def encode(self, string, **kwargs):
+    def encode(self, string: str, **kwargs) -> List[int]:
         # note that is_fragment is not used for this tokenizer
-        return self._tokenizer.encode(string, allowed_special=self.allowed_special_tokens, **kwargs)
+        return self._tokenizer.encode(string, allowed_special=self._allowed_special_tokens, **kwargs)
 
-    def decode(self, tokens, **kwargs):
+    def decode(self, tokens: List[int], **kwargs) -> str:
         return self._tokenizer.decode(tokens, **kwargs)
 
 

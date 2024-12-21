@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import openai
 from openai import AsyncOpenAI, AsyncStream
@@ -16,7 +16,7 @@ import re
 import regex
 
 from ._llm import LLM, LLMSession, SyncSession
-
+from ._api_llm import APILLM
 
 # After the changes introduced in PR #1488 (https://github.com/openai/openai-python/pull/1488),
 # in some cases, pytest is not properly finalizing after all tests pass successfully.
@@ -138,57 +138,33 @@ def add_text_to_chat_mode(chat_mode):
         return chat_mode
 
 
-class OpenAI(LLM):
+class OpenAI(APILLM):
     llm_name: str = "openai"
     chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|o1-preview|o1-mini)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
     default_allowed_special_tokens: List[str] = ["<|endoftext|>", "<|endofprompt|>"]
 
+    # API
+    _api_exclude_arguments: Optional[List[str]] = []
+    _api_rename_arguments: Optional[Dict[str, str]] = {}
+
     # Serialization
-    excluded_args: List[str] = ['token', 'api_key']
+    excluded_args: List[str] = ['api_key', 'api_type']
     class_attribute_map: Dict[str, str] = {
         'model': 'model_name',
         'encoding_name': '_encoding_name',
         'allowed_special_tokens': '_allowed_special_tokens'
     }
 
-    def __init__(self, model=None, caching=True, max_retries=5, max_calls_per_min=60,
-                 api_key=None, api_type="open_ai", api_base=None, api_version=None, deployment_id=None,
-                 temperature=0.0, chat_mode="auto", organization=None, rest_call=False,
-                 allowed_special_tokens=None,
-                 token=None, endpoint=None, encoding_name=None):
-        super().__init__()
+    def __init__(
+            self,
+            model=None,
+            api_key=None,
+            allowed_special_tokens: Optional[str] = None,
+            encoding_name: Optional[str] = None,
+            **kwargs
+    ):
+        api_type = "open_ai"
 
-        # map old param values
-        # TODO: add deprecated warnings after some time
-        if token is not None:    
-            if api_key is None:
-                api_key = token
-        if endpoint is not None:
-            if api_base is None:
-                api_base = endpoint
-
-        # fill in default model value
-        if model is None:
-            model = os.environ.get("OPENAI_MODEL", None)
-        if model is None:
-            try:
-                with open(os.path.expanduser('~/.openai_model'), 'r') as file:
-                    model = file.read().replace('\n', '')
-            except:
-                pass
-
-        # fill in default deployment_id value
-        if deployment_id is None:
-            deployment_id = os.environ.get("OPENAI_DEPLOYMENT_ID", None)
-
-        # auto detect chat completion mode
-        if chat_mode == "auto":
-            # parse to determine if the model need to use the chat completion API
-            if re.match(self.chat_model_pattern, model):
-                chat_mode = True
-            else:
-                chat_mode = False
-        
         # fill in default API key value
         if api_key is None: # get from environment variable
             api_key = os.environ.get("OPENAI_API_KEY", getattr(openai, "api_key", None))
@@ -201,70 +177,45 @@ class OpenAI(LLM):
                     api_key = file.read().replace('\n', '')
             except:
                 pass
-        if organization is None:
-            organization = os.environ.get("OPENAI_ORGANIZATION", None)
-        # fill in default endpoint value
-        if api_base is None:
-            api_base = os.environ.get("OPENAI_API_BASE", None) or os.environ.get("OPENAI_ENDPOINT", None) # ENDPOINT is deprecated
+        if isinstance(api_key, str):
+            api_key = api_key.replace("Bearer ", "")
 
+        # fill in default model value
+        if model is None:
+            model = os.environ.get("OPENAI_MODEL", None)
+        if model is None:
+            try:
+                with open(os.path.expanduser('~/.openai_model'), 'r') as file:
+                    model = file.read().replace('\n', '')
+            except:
+                pass
+
+        super().__init__(
+            model=model, api_key=api_key, api_type=api_type, **kwargs
+        )
+
+        # Tokenizer
         import tiktoken
-
         # TODO: Remove.
         # Currently (17/09/2024) tiktoken doesn't support openai "o1" models.
         # https://github.com/openai/tiktoken/issues/337
         from tiktoken.model import MODEL_PREFIX_TO_ENCODING, MODEL_TO_ENCODING
         MODEL_PREFIX_TO_ENCODING.update({"o1-": "o200k_base"})
-
         if encoding_name is None:
             encoding_name = tiktoken.encoding_for_model(model).name
         self._encoding_name = encoding_name
         self._tokenizer = tiktoken.get_encoding(encoding_name)
-        self.chat_mode = chat_mode
-
+        # Special tokens
         self._allowed_special_tokens = allowed_special_tokens if allowed_special_tokens is not None \
             else self.default_allowed_special_tokens
-        self.model_name = model
-        self.deployment_id = deployment_id
-        self.caching = caching
-        self.max_retries = max_retries
-        self.max_calls_per_min = max_calls_per_min
-        if isinstance(api_key, str):
-            api_key = api_key.replace("Bearer ", "")
-        self.api_key = api_key
-        self.api_type = api_type
-        self.api_base = api_base
-        self.api_version = api_version
-        self.current_time = time.time()
-        self.call_history = collections.deque()
-        self.temperature = temperature
-        self.organization = organization
-        self.rest_call = rest_call
-        self.endpoint = endpoint
 
-        if not self.rest_call:
-            self.caller = self._library_call
-        else:
-            self.caller = self._rest_call
-            self._rest_headers = {
-                "Content-Type": "application/json"
-            }
+        self.chat_mode = True  # Only OpenAI chat-mode will be supported
 
     def session(self, asynchronous=False):
         if asynchronous:
             return OpenAISession(self)
         else:
             return SyncSession(OpenAISession(self))
-
-    def role_start(self, role_name, **kwargs):
-        assert self.chat_mode, "role_start() can only be used in chat mode"
-        return "<|im_start|>"+role_name+"".join([f' {k}="{v}"' for k,v in kwargs.items()])+"\n"
-    
-    def role_end(self, role=None):
-        assert self.chat_mode, "role_end() can only be used in chat mode"
-        return "<|im_end|>"
-    
-    def end_of_text(self):
-        return "<|endoftext|>"
     
     @classmethod
     async def stream_then_save(cls, gen, key, stop_regex, n):
@@ -357,26 +308,6 @@ class OpenAI(LLM):
             yield out
 
         cls.cache[key] = list_out
-    
-    def _stream_completion(self):
-        pass
-
-    # Define a function to add a call to the deque
-    def add_call(self):
-        # Get the current timestamp in seconds
-        now = time.time()
-        # Append the timestamp to the right of the deque
-        self.call_history.append(now)
-
-    # Define a function to count the calls in the last 60 seconds
-    def count_calls(self):
-        # Get the current timestamp in seconds
-        now = time.time()
-        # Remove the timestamps that are older than 60 seconds from the left of the deque
-        while self.call_history and self.call_history[0] < now - 60:
-            self.call_history.popleft()
-        # Return the length of the deque as the number of calls
-        return len(self.call_history)
 
     async def _library_call(self, **kwargs):
         """ Call the OpenAI API using the python package.
@@ -429,96 +360,17 @@ class OpenAI(LLM):
         return out
 
     async def _rest_call(self, **kwargs):
-        """ Call the OpenAI API using the REST API.
-        """
-
-        # Define the request headers
-        headers = copy.copy(self._rest_headers)
-        if self.api_key is not None:
-            headers['Authorization'] = f"Bearer {self.api_key}"
-
-        # Define the request data
-        stream = kwargs.get("stream", False)
-        data = {
-            "model": self.model_name,
-            "prompt": kwargs["prompt"],
-            "max_tokens": kwargs.get("max_tokens", None),
-            "temperature": kwargs.get("temperature", 0.0),
-            "top_p": kwargs.get("top_p", 1.0),
-            "n": kwargs.get("n", 1),
-            "stream": stream,
-            "logprobs": kwargs.get("logprobs", None),
-            'stop': kwargs.get("stop", None),
-            "echo": kwargs.get("echo", False)
-        }
-
-        # "o1-":
-        #  - 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
-        #  - 'temperature' does not support 0 with this model. Only the default (1) value is supported.
-        #  - 'stop' is not supported with this model.
-        #  - 'stream' does not support true with this model. Only the default (false) value is supported.
-        if data['model'].startswith('o1-'):
-            data.update({
-                "max_completion_tokens": kwargs.get("max_completion_tokens", kwargs.get("max_tokens", None)),
-                "stream": False
-            })
-            del data['max_tokens']
-            del data['stop']
-
-        if self.chat_mode:
-            data['messages'] = prompt_to_messages(data['prompt'])
-            del data['prompt']
-            del data['echo']
-
-        # Send a POST request and get the response
-        # An exception for timeout is raised if the server has not issued a response for 10 seconds
-        try:
-            if stream:
-                session = aiohttp.ClientSession()
-                response = await session.post(self.endpoint, json=data, headers=headers, timeout=60)
-                status = response.status
-            else:
-                response = requests.post(self.endpoint, headers=headers, json=data, timeout=60)
-                status = response.status_code
-                text = response.text
-            if status != 200:
-                if stream:
-                    text = await response.text()
-                raise Exception("Response is not 200: " + text)
-            if stream:
-                response = self._rest_stream_handler(response, session)
-            else:
-                response = response.json()
-        except requests.Timeout:
-            raise Exception("Request timed out.")
-        except requests.ConnectionError:
-            raise Exception("Connection error occurred.")
-        if self.chat_mode:
-            response = add_text_to_chat_mode(response)
-        return response
-        
-    async def _close_response_and_session(self, response, session):
-        await response.release()
-        await session.close()
+        raise NotImplementedError
 
     async def _rest_stream_handler(self, response, session):
-        # async for line in response.iter_lines():
-        async for line in response.content:
-            text = line.decode('utf-8')
-            if text.startswith('data: '):
-                text = text[6:]
-                if text.strip() == '[DONE]':
-                    await self._close_response_and_session(response, session)
-                    break
-                else:
-                    yield json.loads(text)
+        raise NotImplementedError
     
-    def encode(self, string):
+    def encode(self, string: str, **kwargs) -> List[int]:
         # note that is_fragment is not used used for this tokenizer
-        return self._tokenizer.encode(string, allowed_special=self._allowed_special_tokens)
+        return self._tokenizer.encode(string, allowed_special=self._allowed_special_tokens, **kwargs)
     
-    def decode(self, tokens):
-        return self._tokenizer.decode(tokens)
+    def decode(self, tokens: List[int], **kwargs) -> str:
+        return self._tokenizer.decode(tokens, **kwargs)
 
 
 def merge_stream_chunks(first_chunk, second_chunk):
