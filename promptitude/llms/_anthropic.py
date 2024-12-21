@@ -1,27 +1,23 @@
 from typing import List, Dict, Optional
 
-import random
-import aiohttp
-import anthropic
-from anthropic import AsyncAnthropic, AsyncStream
 import os
 import copy
-import time
 import asyncio
 import types
-import collections
-import json
-import re
 import regex
 import logging
+import pyparsing as pp
 
-from ._llm import LLM, LLMSession, SyncSession
+import anthropic
+from anthropic import AsyncAnthropic, AsyncStream
+
+from ._llm import LLMSession, SyncSession
 from ._api_llm import APILLM
 
 log = logging.getLogger(__name__)
 
-import pyparsing as pp
 
+# Define grammar
 role_start_tag = pp.Suppress(pp.Optional(pp.White()) + pp.Literal("<|im_start|>"))
 role_start_name = pp.Word(pp.alphanums + "_")("role_name")
 role_kwargs = pp.Suppress(pp.Optional(" ")) + pp.Dict(pp.Group(pp.Word(pp.alphanums + "_") + pp.Suppress("=") + pp.QuotedString('"')))("kwargs")
@@ -357,7 +353,6 @@ class Anthropic(APILLM):
         return self._tokenizer.decode(tokens, **kwargs)
 
 
-# Define a deque to store the timestamps of the calls
 class AnthropicSession(LLMSession):
     async def __call__(self, prompt, stop=None, stop_regex=None, temperature=None, n=1, max_tokens=1000, logprobs=None,
                        top_p=1.0, top_k=None, echo=False, logit_bias=None, token_healing=None, pattern=None, stream=None,
