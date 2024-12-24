@@ -12,7 +12,7 @@ import anthropic
 from anthropic import AsyncAnthropic, AsyncStream
 
 from ._llm import LLMSession, SyncSession
-from ._api_llm import APILLM
+from ._api_llm import APILLM, APILLMSession
 
 log = logging.getLogger(__name__)
 
@@ -158,9 +158,11 @@ class Anthropic(APILLM):
 
     # API
     _api_exclude_arguments: Optional[List[str]] = [
-        'organization', 'deployment_id'
+        'organization', 'n', 'prompt'
     ]
-    _api_rename_arguments: Optional[Dict[str, str]] = {}
+    _api_rename_arguments: Optional[Dict[str, str]] = {
+        'stop': 'stop_sequences'
+    }
 
     # Serialization
     excluded_args: List[str] = ['api_key', 'api_type']
@@ -214,9 +216,9 @@ class Anthropic(APILLM):
 
     def session(self, asynchronous=False):
         if asynchronous:
-            return AnthropicSession(self)
+            return APILLMSession(self)
         else:
-            return SyncSession(AnthropicSession(self))
+            return SyncSession(APILLMSession(self))
 
     @classmethod
     async def stream_then_save(cls, gen, key, stop_regex, n):
@@ -313,27 +315,36 @@ class Anthropic(APILLM):
 
         cls.cache[key] = list_out
 
-    async def _library_call(self, **kwargs):
+    async def _library_call(self, **call_kwargs):
         """ Call the Anthropic API using the python package."""
         assert self.api_key is not None, "You must provide an Anthropic API key to use the Anthropic LLM. " \
                                          "Either pass it in the constructor, set the ANTHROPIC_API_KEY environment " \
                                          "variable, or create the file ~/.anthropic_api_key with your key in it."
 
+        # Filter non supported call arguments
+        n = call_kwargs['n']
+        if n > 1:
+            raise ValueError(f"Anthropic doesn't support more than one chat completion (n>1={n})")
+        assert 'n' in self._api_exclude_arguments
+
+        # Process messages
+        messages = prompt_to_messages(call_kwargs['prompt'])
+        system_msgs = [s1['content'] for s1 in messages if s1['role'] == 'system']
+        call_kwargs['system'] = system_msgs[-1] if len(system_msgs) > 0 else None
+        call_kwargs['messages'] = [s1 for s1 in messages if s1['role'] != 'system']
+        assert 'prompt' in self._api_exclude_arguments
+
+        # Parse call arguments
+        call_args = self.parse_call_arguments(call_kwargs)
+        if 'stop_sequences' in call_args and not isinstance(call_args['stop_sequences'], list):
+            # stop_sequences: Input should be a valid list
+            call_args['stop_sequences'] = [call_args['stop_sequences'], ]
+
         # Start API client
         client = AsyncAnthropic(api_key=self.api_key)
 
-        # Get messages/system from prompt
-        messages = prompt_to_messages(kwargs['prompt'])
-        system_msgs = [s1['content'] for s1 in messages if s1['role'] == 'system']
-        kwargs['system'] = system_msgs[-1] if len(system_msgs) > 0 else None
-        kwargs['messages'] = [s1 for s1 in messages if s1['role'] != 'system']
-
-        # Remove unused arguments
-        unused_arguments = ['prompt', 'stop_sequences']
-        kwargs = {k: v for k, v in kwargs.items() if k not in unused_arguments}
-
         # Call LLM API
-        out = await client.messages.create(**kwargs)
+        out = await client.messages.create(**call_args)
         log.info(f"LLM call response: {out}")
         out = add_text_to_chat_mode(out)
 
@@ -353,7 +364,11 @@ class Anthropic(APILLM):
         return self._tokenizer.decode(tokens, **kwargs)
 
 
-class AnthropicSession(LLMSession):
+class AnthropicSession(APILLMSession):
+    pass
+
+
+class _AnthropicSession(LLMSession):
     async def __call__(self, prompt, stop=None, stop_regex=None, temperature=None, n=1, max_tokens=1000, logprobs=None,
                        top_p=1.0, top_k=None, echo=False, logit_bias=None, token_healing=None, pattern=None, stream=None,
                        cache_seed=0, caching=None, function_call=None, **completion_kwargs):

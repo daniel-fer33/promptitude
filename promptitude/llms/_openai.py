@@ -12,7 +12,7 @@ import openai
 from openai import AsyncOpenAI, AsyncStream
 
 from ._llm import LLMSession, SyncSession
-from ._api_llm import APILLM
+from ._api_llm import APILLM, APILLMSession
 
 log = logging.getLogger(__name__)
 
@@ -210,7 +210,9 @@ class OpenAI(APILLM):
     default_allowed_special_tokens: List[str] = ["<|endoftext|>", "<|endofprompt|>"]
 
     # API
-    _api_exclude_arguments: Optional[List[str]] = []
+    _api_exclude_arguments: Optional[List[str]] = [
+        'prompt'
+    ]
     _api_rename_arguments: Optional[Dict[str, str]] = {}
 
     # Serialization
@@ -377,53 +379,31 @@ class OpenAI(APILLM):
 
         cls.cache[key] = list_out
 
-    async def _library_call(self, **kwargs):
-        """ Call the OpenAI API using the python package.
+    async def _library_call(self, **call_kwargs):
+        """ Call the OpenAI API using the python package."""
+        assert self.api_key is not None, "You must provide an OpenAI API key to use the OpenAI LLM. " \
+                                         "Either pass it in the constructor, set the OPENAI_API_KEY environment " \
+                                         "variable, or create the file ~/.openai_api_key with your key in it."
 
-        Note that is uses the local auth token, and does not rely on the openai one.
-        """
+        # Filter non supported call arguments
+        pass
 
-        # save the params of the openai library
-        prev_key = openai.api_key
-        prev_org = openai.organization
-        prev_type = openai.api_type
-        prev_version = openai.api_version
-        prev_base = openai.base_url
+        # Process messages
+        messages = prompt_to_messages(call_kwargs['prompt'])
+        call_kwargs['messages'] = messages
+        assert 'prompt' in self._api_exclude_arguments
 
-        # set the params of the openai library if we have them
-        if self.api_key is not None:
-            openai.api_key = self.api_key
-        if self.organization is not None:
-            openai.organization = self.organization
-        if self.api_type is not None:
-            openai.api_type = self.api_type
-        if self.api_version is not None:
-            openai.api_version = self.api_version
-        if self.api_base is not None:
-            openai.base_url = self.api_base
+        # Parse call arguments
+        call_args = self.parse_call_arguments(call_kwargs)
 
-        assert openai.api_key is not None, "You must provide an OpenAI API key to use the OpenAI LLM. Either pass it in the constructor, set the OPENAI_API_KEY environment variable, or create the file ~/.openai_api_key with your key in it."
-
+        # Start API client
         client = AsyncOpenAI(api_key=self.api_key)
         client._platform = PLATFORM
 
-        if self.chat_mode:
-            kwargs['messages'] = prompt_to_messages(kwargs['prompt'])
-            del kwargs['prompt']
-            del kwargs['echo']
-            # print(kwargs)
-            out = await client.chat.completions.create(**kwargs)
-            out = add_text_to_chat_mode(out)
-        else:
-            out = await client.completions.create(**kwargs)
-            out = out.model_dump()
-
-        # restore the params of the openai library
-        openai.api_key = prev_key
-        openai.organization = prev_org
-        openai.api_type = prev_type
-        openai.api_version = prev_version
-        openai.base_url = prev_base
+        # Call LLM API
+        out = await client.chat.completions.create(**call_args)
+        log.info(f"LLM call response: {out}")
+        out = add_text_to_chat_mode(out)
 
         return out
 
@@ -441,7 +421,11 @@ class OpenAI(APILLM):
         return self._tokenizer.decode(tokens, **kwargs)
 
 
-class OpenAISession(LLMSession):
+class OpenAISession(APILLMSession):
+    pass
+
+
+class _OpenAISession(LLMSession):
     async def __call__(self, prompt, stop=None, stop_regex=None, temperature=None, n=1,
                        max_tokens=1000, max_completion_tokens=1000, logprobs=None,
                        top_p=1.0, echo=False, logit_bias=None, token_healing=None, pattern=None, stream=None,
@@ -496,7 +480,6 @@ class OpenAISession(LLMSession):
                     self.llm.add_call()
                     call_args = {
                         "model": self.llm.model_name,
-                        #"deployment_id": self.llm.deployment_id,  # Deprecated
                         "prompt": prompt,
                         "max_tokens": max_tokens,
                         "temperature": temperature,

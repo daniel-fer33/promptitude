@@ -47,6 +47,8 @@ class LLM(metaclass=LLMMeta):
     cache_version: int = 1  # Version of the cache to handle cache invalidation when the class implementation changes.
     default_system_prompt: str = "You are a helpful assistant."
     llm_name: str = "unknown"
+    temperature: float = 0.0
+    caching: bool = True
 
     # Serialization
     excluded_args: List[str] = []
