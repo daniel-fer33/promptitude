@@ -23,17 +23,6 @@ from openai._base_client import get_platform
 PLATFORM = get_platform()
 
 
-# Define grammar
-role_start_tag = pp.Suppress(pp.Optional(pp.White()) + pp.Literal("<|im_start|>"))
-role_start_name = pp.Word(pp.alphanums + "_")("role_name")
-role_kwargs = pp.Suppress(pp.Optional(" ")) + pp.Dict(pp.Group(pp.Word(pp.alphanums + "_") + pp.Suppress("=") + pp.QuotedString('"')))("kwargs")
-role_start = (role_start_tag + role_start_name + pp.Optional(role_kwargs) + pp.Suppress("\n")).leave_whitespace()
-role_end = pp.Suppress(pp.Literal("<|im_end|>"))
-role_content = pp.Combine(pp.ZeroOrMore(pp.CharsNotIn("<") | pp.Literal("<") + ~pp.FollowedBy("|im_end|>")))("role_content")
-role_group = pp.Group(role_start + role_content + role_end)("role_group").leave_whitespace()
-partial_role_group = pp.Group(role_start + role_content)("role_group").leave_whitespace()
-roles_grammar = pp.ZeroOrMore(role_group) + pp.Optional(partial_role_group) + pp.StringEnd()
-
 # define the syntax for the function definitions
 start_functions = pp.Suppress(pp.Literal("## functions\n\nnamespace functions {\n\n"))
 comment = pp.Combine(pp.Suppress(pp.Literal("//") + pp.Optional(" ")) + pp.restOfLine)
@@ -44,30 +33,6 @@ parameter_type = (pp.Word(pp.alphas + "_")("simple_type") | pp.QuotedString('"')
 parameter_def = pp.Optional(comment)("parameter_description") + pp.Word(pp.alphas + "_")("parameter_name") + pp.Optional(pp.Literal("?"))("is_optional") + pp.Suppress(pp.Literal(":")) + pp.Group(parameter_type)("parameter_type")
 function_def = function_def_start + pp.OneOrMore(pp.Group(parameter_def)("parameter")) + function_def_end
 functions_def = start_functions + pp.OneOrMore(pp.Group(function_def)("function")) + end_functions
-
-
-def prompt_to_messages(prompt):
-    messages = []
-
-    assert prompt.endswith("<|im_start|>assistant\n"), "When calling OpenAI chat models you must generate only directly inside the assistant role! The OpenAI API does not currently support partial assistant prompting."
-
-    parsed_prompt = roles_grammar.parse_string(prompt)
-
-    # pattern = r'<\|im_start\|>([^\n]+)\n(.*?)(?=<\|im_end\|>|$)'
-    # matches = re.findall(pattern, prompt, re.DOTALL)
-
-    # if not matches:
-    #     return [{'role': 'user', 'content': prompt}]
-
-    for role in parsed_prompt:
-        if len(role["role_content"]) > 0: # only add non-empty messages (OpenAI does not support empty messages anyway)
-            message = {'role': role["role_name"], 'content': role["role_content"]}
-            if "kwargs" in role:
-                for k, v in role["kwargs"].items():
-                    message[k] = v
-            messages.append(message)
-
-    return messages
 
 
 async def add_text_to_chat_mode_generator(chat_mode):
@@ -389,7 +354,7 @@ class OpenAI(APILLM):
         pass
 
         # Process messages
-        messages = prompt_to_messages(call_kwargs['prompt'])
+        messages = self.prompt_to_messages(call_kwargs['prompt'])
         call_kwargs['messages'] = messages
         assert 'prompt' in self._api_exclude_arguments
 

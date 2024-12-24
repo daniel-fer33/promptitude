@@ -7,13 +7,26 @@ import collections
 import inspect
 import asyncio
 
+import pyparsing as pp
+
 from ._llm import LLM, LLMSession
 
 
 class APILLM(LLM):
-    """Abstract base class for API-based LLMs."""
+    """Abstract base class for API-based LLMs, based on OpenAI API"""
     _api_exclude_arguments: Optional[List[str]] = None  # Exclude arguments to pass to the API
     _api_rename_arguments: Optional[Dict[str, str]] = None  # Rename arguments before passing to API
+
+    # Define grammar
+    role_start_tag = pp.Suppress(pp.Optional(pp.White()) + pp.Literal("<|im_start|>"))
+    role_start_name = pp.Word(pp.alphanums + "_")("role_name")
+    role_kwargs = pp.Suppress(pp.Optional(" ")) + pp.Dict(pp.Group(pp.Word(pp.alphanums + "_") + pp.Suppress("=") + pp.QuotedString('"')))("kwargs")
+    role_start = (role_start_tag + role_start_name + pp.Optional(role_kwargs) + pp.Suppress("\n")).leave_whitespace()
+    role_end = pp.Suppress(pp.Literal("<|im_end|>"))
+    role_content = pp.Combine(pp.ZeroOrMore(pp.CharsNotIn("<") | pp.Literal("<") + ~pp.FollowedBy("|im_end|>")))("role_content")
+    role_group = pp.Group(role_start + role_content + role_end)("role_group").leave_whitespace()
+    partial_role_group = pp.Group(role_start + role_content)("role_group").leave_whitespace()
+    roles_grammar = pp.ZeroOrMore(role_group) + pp.Optional(partial_role_group) + pp.StringEnd()
 
     def __init__(
             self,
@@ -86,6 +99,31 @@ class APILLM(LLM):
 
     def end_of_text(self):
         return "<|endoftext|>"
+
+    def prompt_to_messages(self, prompt: str) -> List[Dict]:
+        messages = []
+
+        assert prompt.endswith(
+            "<|im_start|>assistant\n"), "When calling OpenAI chat models you must generate only directly inside the assistant role! The OpenAI API does not currently support partial assistant prompting."
+
+        parsed_prompt = self.roles_grammar.parse_string(prompt)
+
+        # pattern = r'<\|im_start\|>([^\n]+)\n(.*?)(?=<\|im_end\|>|$)'
+        # matches = re.findall(pattern, prompt, re.DOTALL)
+
+        # if not matches:
+        #     return [{'role': 'user', 'content': prompt}]
+
+        for role in parsed_prompt:
+            if len(role[
+                       "role_content"]) > 0:  # only add non-empty messages (OpenAI does not support empty messages anyway)
+                message = {'role': role["role_name"], 'content': role["role_content"]}
+                if "kwargs" in role:
+                    for k, v in role["kwargs"].items():
+                        message[k] = v
+                messages.append(message)
+
+        return messages
 
     # Define a function to add a call to the deque
     def add_call(self):

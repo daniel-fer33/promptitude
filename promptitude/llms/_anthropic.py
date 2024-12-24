@@ -17,42 +17,6 @@ from ._api_llm import APILLM, APILLMSession
 log = logging.getLogger(__name__)
 
 
-# Define grammar
-role_start_tag = pp.Suppress(pp.Optional(pp.White()) + pp.Literal("<|im_start|>"))
-role_start_name = pp.Word(pp.alphanums + "_")("role_name")
-role_kwargs = pp.Suppress(pp.Optional(" ")) + pp.Dict(pp.Group(pp.Word(pp.alphanums + "_") + pp.Suppress("=") + pp.QuotedString('"')))("kwargs")
-role_start = (role_start_tag + role_start_name + pp.Optional(role_kwargs) + pp.Suppress("\n")).leave_whitespace()
-role_end = pp.Suppress(pp.Literal("<|im_end|>"))
-role_content = pp.Combine(pp.ZeroOrMore(pp.CharsNotIn("<") | pp.Literal("<") + ~pp.FollowedBy("|im_end|>")))("role_content")
-role_group = pp.Group(role_start + role_content + role_end)("role_group").leave_whitespace()
-partial_role_group = pp.Group(role_start + role_content)("role_group").leave_whitespace()
-roles_grammar = pp.ZeroOrMore(role_group) + pp.Optional(partial_role_group) + pp.StringEnd()
-
-
-def prompt_to_messages(prompt):
-    messages = []
-
-    assert prompt.endswith("<|im_start|>assistant\n"), "When calling OpenAI chat models you must generate only directly inside the assistant role! The OpenAI API does not currently support partial assistant prompting."
-
-    parsed_prompt = roles_grammar.parse_string(prompt)
-
-    # pattern = r'<\|im_start\|>([^\n]+)\n(.*?)(?=<\|im_end\|>|$)'
-    # matches = re.findall(pattern, prompt, re.DOTALL)
-
-    # if not matches:
-    #     return [{'role': 'user', 'content': prompt}]
-
-    for role in parsed_prompt:
-        if len(role["role_content"]) > 0: # only add non-empty messages (OpenAI does not support empty messages anyway)
-            message = {'role': role["role_name"], 'content': role["role_content"]}
-            if "kwargs" in role:
-                for k, v in role["kwargs"].items():
-                    message[k] = v
-            messages.append(message)
-
-    return messages
-
-
 def anthropic_messages_response_to_opeanai_completion_dict(messages_response):
     out = messages_response.model_dump()
     if 'message' in out:
@@ -328,7 +292,7 @@ class Anthropic(APILLM):
         assert 'n' in self._api_exclude_arguments
 
         # Process messages
-        messages = prompt_to_messages(call_kwargs['prompt'])
+        messages = self.prompt_to_messages(call_kwargs['prompt'])
         system_msgs = [s1['content'] for s1 in messages if s1['role'] == 'system']
         call_kwargs['system'] = system_msgs[-1] if len(system_msgs) > 0 else None
         call_kwargs['messages'] = [s1 for s1 in messages if s1['role'] != 'system']
