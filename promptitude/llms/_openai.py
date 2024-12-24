@@ -253,7 +253,7 @@ class OpenAI(APILLM):
             return SyncSession(OpenAISession(self))
 
     @classmethod
-    async def stream_then_save(cls, gen, key, stop_regex, n):
+    async def process_stream(cls, gen, key, stop_regex, n):
         list_out = []
         cached_out = None
 
@@ -509,7 +509,7 @@ class _OpenAISession(LLMSession):
                         f"Last error message: {error_msg}")
 
             if stream:
-                return self.llm.stream_then_save(out, key, stop_regex, n)
+                return self.llm.process_stream(out, key, stop_regex, n)
             else:
                 llm_cache[key] = out
         

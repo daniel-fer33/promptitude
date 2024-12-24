@@ -186,7 +186,7 @@ class Anthropic(APILLM):
             return SyncSession(APILLMSession(self))
 
     @classmethod
-    async def stream_then_save(cls, gen, key, stop_regex, n):
+    async def process_stream(cls, gen, key, stop_regex, n):
         assert not stop_regex, "Currently `stop_regex` is not implemented for Anthropic API"
 
         list_out = []

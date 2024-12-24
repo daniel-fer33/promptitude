@@ -1,5 +1,5 @@
 import copy
-from typing import List, Dict, Optional, Any, Callable
+from typing import Any, Callable, Dict, List, Optional, Deque
 
 from abc import abstractmethod
 import time
@@ -13,7 +13,7 @@ from ._llm import LLM, LLMSession
 
 
 class APILLM(LLM):
-    """Abstract base class for API-based LLMs, based on OpenAI API"""
+    """Abstract base class for API-based LLMs"""
     _api_exclude_arguments: Optional[List[str]] = None  # Exclude arguments to pass to the API
     _api_rename_arguments: Optional[Dict[str, str]] = None  # Rename arguments before passing to API
 
@@ -30,16 +30,16 @@ class APILLM(LLM):
 
     def __init__(
             self,
-            api_key: str = None,
-            api_type: str = None,
-            api_version: str = None,
-            api_base: str = None,
+            api_key: Optional[str] = None,
+            api_type: Optional[str] = None,
+            api_version: Optional[str] = None,
+            api_base: Optional[str] = None,
 
             max_retries: int = 5,
             max_calls_per_min: int = 60,
             caching: bool = True,
 
-            model: str = None,
+            model: Optional[str] = None,
             temperature: float = 0.0,
 
             organization: Optional[str] = None,
@@ -49,28 +49,28 @@ class APILLM(LLM):
     ):
         super().__init__()
 
-        self.api_key = api_key
-        self.api_type = api_type
-        self.api_version = api_version
-        self.api_base = api_base
+        self.api_key: Optional[str] = api_key
+        self.api_type: Optional[str] = api_type
+        self.api_version: Optional[str] = api_version
+        self.api_base: Optional[str] = api_base
 
-        self.max_retries = max_retries
-        self.max_calls_per_min = max_calls_per_min
-        self.caching = caching
+        self.max_retries: int = max_retries
+        self.max_calls_per_min: int = max_calls_per_min
+        self.caching: bool = caching
 
-        self.model_name = model
-        self.temperature = temperature
+        self.model_name: Optional[str] = model
+        self.temperature: float = temperature
 
-        self.organization = organization
-        self.project = project
+        self.organization: Optional[str] = organization
+        self.project: Optional[str] = project
 
-        self.rest_call = rest_call
+        self.rest_call: bool = rest_call
 
-        self.call_history = collections.deque()
-        self.current_time = time.time()
+        self.call_history: Deque[float] = collections.deque()
+        self.current_time: float = time.time()
 
-        self.caller: Callable
-        self._rest_headers = dict()
+        self.caller: Callable[..., Any]
+        self._rest_headers: Dict[str, str] = {}
         if not self.rest_call:
             self.caller = self._library_call
         else:
@@ -80,44 +80,39 @@ class APILLM(LLM):
             })
 
     @abstractmethod
-    async def _library_call(self, **kwargs):
+    async def _library_call(self, **kwargs: Any) -> Any:
+        """Make an API call using a library (to be implemented by subclasses)."""
         call_args = self.parse_call_arguments(kwargs)
         pass
 
     @abstractmethod
-    async def _rest_call(self, **kwargs):
+    async def _rest_call(self, **kwargs: Any) -> Any:
+        """Make an API call using a REST endpoint (to be implemented by subclasses)."""
         call_args = self.parse_call_arguments(kwargs)
         pass
 
-    def role_start(self, role_name, **kwargs):
+    def role_start(self, role_name: str, **kwargs: Any) -> str:
         assert self.chat_mode, "role_start() can only be used in chat mode"
         return "<|im_start|>" + role_name + "".join([f' {k}="{v}"' for k, v in kwargs.items()]) + "\n"
 
-    def role_end(self, role=None):
+    def role_end(self, role: Optional[str] = None) -> str:
         assert self.chat_mode, "role_end() can only be used in chat mode"
         return "<|im_end|>"
 
-    def end_of_text(self):
+    def end_of_text(self) -> str:
         return "<|endoftext|>"
 
-    def prompt_to_messages(self, prompt: str) -> List[Dict]:
-        messages = []
+    def prompt_to_messages(self, prompt: str) -> List[Dict[str, Any]]:
+        messages: List[Dict[str, Any]] = []
 
         assert prompt.endswith(
             "<|im_start|>assistant\n"), "When calling OpenAI chat models you must generate only directly inside the assistant role! The OpenAI API does not currently support partial assistant prompting."
 
         parsed_prompt = self.roles_grammar.parse_string(prompt)
 
-        # pattern = r'<\|im_start\|>([^\n]+)\n(.*?)(?=<\|im_end\|>|$)'
-        # matches = re.findall(pattern, prompt, re.DOTALL)
-
-        # if not matches:
-        #     return [{'role': 'user', 'content': prompt}]
-
         for role in parsed_prompt:
-            if len(role[
-                       "role_content"]) > 0:  # only add non-empty messages (OpenAI does not support empty messages anyway)
-                message = {'role': role["role_name"], 'content': role["role_content"]}
+            if len(role["role_content"]) > 0:
+                message: Dict[str, Any] = {'role': role["role_name"], 'content': role["role_content"]}
                 if "kwargs" in role:
                     for k, v in role["kwargs"].items():
                         message[k] = v
@@ -125,31 +120,41 @@ class APILLM(LLM):
 
         return messages
 
-    # Define a function to add a call to the deque
-    def add_call(self):
-        # Get the current timestamp in seconds
-        now = time.time()
+    def add_call(self) -> None:
+        """Add the current call timestamp to call history for rate limiting."""
+        now: float = time.time()
         # Append the timestamp to the right of the deque
         self.call_history.append(now)
 
-    # Define a function to count the calls in the last 60 seconds
-    def count_calls(self):
-        # Get the current timestamp in seconds
-        now = time.time()
+    def count_calls(self) -> int:
+        """Count the number of API calls in the last minute."""
+        now: float = time.time()
         # Remove the timestamps that are older than 60 seconds from the left of the deque
         while self.call_history and self.call_history[0] < now - 60:
             self.call_history.popleft()
         # Return the length of the deque as the number of calls
         return len(self.call_history)
 
-    def parse_call_arguments(self, call_args: Dict) -> Dict:
-        call_exclude_arguments = self._api_exclude_arguments or {}
+    def parse_call_arguments(self, call_args: Dict[str, Any]) -> Dict[str, Any]:
+        """Process and prepare call arguments to be passed to the API."""
+        call_exclude_arguments = self._api_exclude_arguments or []
         call_rename_arguments = self._api_rename_arguments or {}
         parsed_call_args = {
             call_rename_arguments.get(k, k): v for k, v in call_args.items()
             if k not in call_exclude_arguments and v is not None
         }
         return parsed_call_args
+
+    async def process_stream(self, gen, key, stop_regex, n):
+        """Default implementation to process and cache the streamed output."""
+        list_out = []
+        async for chunk in gen:
+            # Process the chunk as needed (e.g., accumulate text)
+            list_out.append(chunk)
+            yield chunk  # Yield to the caller
+
+        # Cache the complete output
+        self.cache[key] = list_out
 
 
 class APILLMSession(LLMSession):
@@ -158,22 +163,25 @@ class APILLMSession(LLMSession):
 
     async def __call__(
             self,
-            prompt,
-
-            temperature=None,
-
-            stream=None,
-            caching=None,
-            cache_seed: int = 0,  # TODO: Remove, not used here.
-            echo: bool = False,  # TODO: Remove, not used here.
+            prompt: str,
+            temperature: Optional[float] = None,
+            n: int = 1,
+            stop_regex: Optional[str] = None,
+            caching: Optional[bool] = None,
+            cache_seed: int = 0,  # Used to generate cache key
+            stream: Optional[bool] = None,
+            logprobs: Optional[bool] = None,
+            echo: bool = False,  # TODO: Remove from callers, not used here.
             function_call = None,  # TODO: Implement or deprecate
-
-            n=1,
-            logprobs=None,
             **call_kwargs
-    ):
-        # TODO: Support stream
-        stream=False
+    ) -> Any:
+        """Call the LLM with the given prompt and parameters."""
+
+        # we need to stream in order to support stop_regex
+        if stream is None:
+            stream = stop_regex is not None
+        assert stop_regex is None or stream, "We can only support stop_regex when stream=True!"
+        assert stop_regex is None or n == 1, "We don't yet support stop_regex combined with n > 1!"
 
         # Set defaults
         if temperature is None:
@@ -232,15 +240,16 @@ class APILLMSession(LLMSession):
                         f"Last error message: {error_msg}")
 
             if stream:
-                # TODO: Support stream
-                raise NotImplementedError
+                # Process the streamed output and cache it
+                return self.llm.process_stream(call_out, key, stop_regex, n)
             else:
                 llm_cache[key] = call_out
 
-        # wrap as a list if needed
+        # Wrap as a list if needed
         if stream:
             if isinstance(llm_cache[key], list):
                 return llm_cache[key]
             return [llm_cache[key]]
 
         return llm_cache[key]
+
