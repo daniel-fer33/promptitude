@@ -20,10 +20,12 @@ class APILLM(LLM):
     # Define grammar
     role_start_tag = pp.Suppress(pp.Optional(pp.White()) + pp.Literal("<|im_start|>"))
     role_start_name = pp.Word(pp.alphanums + "_")("role_name")
-    role_kwargs = pp.Suppress(pp.Optional(" ")) + pp.Dict(pp.Group(pp.Word(pp.alphanums + "_") + pp.Suppress("=") + pp.QuotedString('"')))("kwargs")
+    role_kwargs = pp.Suppress(pp.Optional(" ")) + pp.Dict(
+        pp.Group(pp.Word(pp.alphanums + "_") + pp.Suppress("=") + pp.QuotedString('"')))("kwargs")
     role_start = (role_start_tag + role_start_name + pp.Optional(role_kwargs) + pp.Suppress("\n")).leave_whitespace()
     role_end = pp.Suppress(pp.Literal("<|im_end|>"))
-    role_content = pp.Combine(pp.ZeroOrMore(pp.CharsNotIn("<") | pp.Literal("<") + ~pp.FollowedBy("|im_end|>")))("role_content")
+    role_content = pp.Combine(pp.ZeroOrMore(pp.CharsNotIn("<") | pp.Literal("<") + ~pp.FollowedBy("|im_end|>")))(
+        "role_content")
     role_group = pp.Group(role_start + role_content + role_end)("role_group").leave_whitespace()
     partial_role_group = pp.Group(role_start + role_content)("role_group").leave_whitespace()
     roles_grammar = pp.ZeroOrMore(role_group) + pp.Optional(partial_role_group) + pp.StringEnd()
@@ -48,6 +50,10 @@ class APILLM(LLM):
             rest_call: bool = False
     ):
         super().__init__()
+
+        # Initialize variables
+        self._api_exclude_arguments = self._api_exclude_arguments or []
+        self._api_rename_arguments = self._api_rename_arguments or {}
 
         self.api_key: Optional[str] = api_key
         self.api_type: Optional[str] = api_type
@@ -83,13 +89,13 @@ class APILLM(LLM):
     async def _library_call(self, **kwargs: Any) -> Any:
         """Make an API call using a library (to be implemented by subclasses)."""
         call_args = self.parse_call_arguments(kwargs)
-        pass
+        raise NotImplementedError("Subclasses must implement _rest_call method.")
 
     @abstractmethod
     async def _rest_call(self, **kwargs: Any) -> Any:
         """Make an API call using a REST endpoint (to be implemented by subclasses)."""
         call_args = self.parse_call_arguments(kwargs)
-        pass
+        raise NotImplementedError("Subclasses must implement _rest_call method.")
 
     def role_start(self, role_name: str, **kwargs: Any) -> str:
         assert self.chat_mode, "role_start() can only be used in chat mode"
@@ -137,11 +143,9 @@ class APILLM(LLM):
 
     def parse_call_arguments(self, call_args: Dict[str, Any]) -> Dict[str, Any]:
         """Process and prepare call arguments to be passed to the API."""
-        call_exclude_arguments = self._api_exclude_arguments or []
-        call_rename_arguments = self._api_rename_arguments or {}
         parsed_call_args = {
-            call_rename_arguments.get(k, k): v for k, v in call_args.items()
-            if k not in call_exclude_arguments and v is not None
+            self._api_rename_arguments.get(k, k): v for k, v in call_args.items()
+            if k not in self._api_exclude_arguments and v is not None
         }
         return parsed_call_args
 
@@ -172,7 +176,7 @@ class APILLMSession(LLMSession):
             stream: Optional[bool] = None,
             logprobs: Optional[bool] = None,
             echo: bool = False,  # TODO: Remove from callers, not used here.
-            function_call = None,  # TODO: Implement or deprecate
+            function_call=None,  # TODO: Implement or deprecate
             **call_kwargs
     ) -> Any:
         """Call the LLM with the given prompt and parameters."""
@@ -225,7 +229,7 @@ class APILLMSession(LLMSession):
                     }
                     call_out = await self.llm.caller(**call_args)
 
-                except () as err:
+                except () as err:  # TODO: Add specific API library exceptions
                     await asyncio.sleep(3)
                     error_msg = err.message
                     try_again = True
@@ -252,4 +256,3 @@ class APILLMSession(LLMSession):
             return [llm_cache[key]]
 
         return llm_cache[key]
-
