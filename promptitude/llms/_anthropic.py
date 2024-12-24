@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple, Type
 
 import os
 import copy
@@ -128,6 +128,13 @@ class Anthropic(APILLM):
     _api_rename_arguments: Optional[Dict[str, str]] = {
         'stop': 'stop_sequences'
     }
+    api_exceptions: Tuple[Type[BaseException], ...] = (
+        anthropic.RateLimitError,
+        anthropic.APIConnectionError,
+        anthropic.APIStatusError,
+        # anthropic.APIError,
+        anthropic.APITimeoutError
+    )
 
     # Serialization
     excluded_args: List[str] = ['api_key', 'api_type']

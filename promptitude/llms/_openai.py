@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple, Type
 
 import os
 import copy
@@ -180,6 +180,13 @@ class OpenAI(APILLM):
         'prompt'
     ]
     _api_rename_arguments: Optional[Dict[str, str]] = {}
+    api_exceptions: Tuple[Type[BaseException], ...] = (
+        openai.RateLimitError,
+        openai.APIConnectionError,
+        openai.APIStatusError,
+        openai.APIError,
+        openai.APITimeoutError
+    )
 
     # Serialization
     excluded_args: List[str] = ['api_key', 'api_type']

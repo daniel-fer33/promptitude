@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Callable, Dict, List, Optional, Deque
+from typing import Any, Callable, Dict, List, Optional, Deque, Tuple, Type
 
 from abc import abstractmethod
 import time
@@ -16,6 +16,7 @@ class APILLM(LLM):
     """Abstract base class for API-based LLMs"""
     _api_exclude_arguments: Optional[List[str]] = None  # Exclude arguments to pass to the API
     _api_rename_arguments: Optional[Dict[str, str]] = None  # Rename arguments before passing to API
+    api_exceptions: Tuple[Type[BaseException], ...] = ()
 
     # Define grammar
     role_start_tag = pp.Suppress(pp.Optional(pp.White()) + pp.Literal("<|im_start|>"))
@@ -229,9 +230,9 @@ class APILLMSession(LLMSession):
                     }
                     call_out = await self.llm.caller(**call_args)
 
-                except () as err:  # TODO: Add specific API library exceptions
+                except self.llm.api_exceptions as err:
                     await asyncio.sleep(3)
-                    error_msg = err.message
+                    error_msg = str(err)
                     try_again = True
                     fail_count += 1
 
