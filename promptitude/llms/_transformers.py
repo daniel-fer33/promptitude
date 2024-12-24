@@ -9,9 +9,10 @@ import queue
 import threading
 import collections.abc
 from ._llm import LLM, LLMSession, SyncSession
+from ._local_llm import LocalLLM
 
 
-class Transformers(LLM):
+class Transformers(LocalLLM):
     """ A HuggingFace transformers language model with Guidance support.
     """
 
@@ -27,8 +28,6 @@ class Transformers(LLM):
 
     def __init__(self, model=None, tokenizer=None, caching=True, token_healing=True, acceleration=True, \
                  temperature=0.0, device=None, **kwargs):
-        super().__init__()
-
         # fill in default model value
         if model is None:
             model = os.environ.get("TRANSFORMERS_MODEL", None)
@@ -38,21 +37,12 @@ class Transformers(LLM):
                     model = file.read().replace('\n', '')
             except:
                 pass
-
         self._init_tokenizer_arg = tokenizer
         self._init_device_arg = device
-        self.model_obj, self.tokenizer = self._model_and_tokenizer(model, tokenizer, **kwargs)
+        super().__init__(model=model, tokenizer=tokenizer, device=device, **kwargs)
 
-        self.model_name = model if isinstance(model, str) else model.__class__.__name__
-        self.caching = caching
-        self.current_time = time.time()
-        self.call_history = collections.deque()
-        self.temperature = temperature
         self.token_healing = token_healing
         self.acceleration = acceleration
-        if device is not None: # set the device if requested
-            self.model_obj = self.model_obj.to(device)
-        self.device = self.model_obj.device # otherwise note the current device
 
         self._token_prefix_map = self._build_token_prefix_map(model)
 
@@ -63,12 +53,6 @@ class Transformers(LLM):
         """ Return the list of tokens that match the given prefix.
         """
         return [v for arr in self._token_prefix_map.values(prefix=prefix) for v in arr]
-
-    def encode(self, string, **kwargs):
-        return self.tokenizer.encode(string, **kwargs)
-        
-    def decode(self, tokens, **kwargs):
-        return self.tokenizer.decode(tokens, **kwargs)
     
     def id_to_token(self, id):
         return self.tokenizer.convert_ids_to_tokens([id])[0]
@@ -96,7 +80,7 @@ class Transformers(LLM):
 
         return token_map
 
-    def _model_and_tokenizer(self, model, tokenizer, **kwargs):
+    def _load_model_and_tokenizer(self, model, tokenizer, **kwargs):
 
         # intantiate the model and tokenizer if needed
         if isinstance(model, str):
@@ -105,13 +89,15 @@ class Transformers(LLM):
             try:
                 import transformers
             except:
-                raise Exception("Please install transformers with `pip install transformers` in order to use guidance.llms.Transformers!")
+                raise Exception("Please install transformers with `pip install transformers` "
+                                "in order to use guidance.llms.Transformers!")
 
             if tokenizer is None:
                 tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
             model = transformers.AutoModelForCausalLM.from_pretrained(model, **kwargs)
         
-        assert tokenizer is not None, "You must give a tokenizer object when you provide a model object (as opposed to just a model name)!"
+        assert tokenizer is not None, "You must give a tokenizer object when you provide a " \
+                                      "model object (as opposed to just a model name)!"
             
         return model, tokenizer
 
