@@ -13,6 +13,7 @@ from anthropic import AsyncAnthropic, AsyncStream
 
 from ._llm import LLMSession, SyncSession
 from ._api_llm import APILLM, APILLMSession
+from ._streamer import BaseStreamer
 
 log = logging.getLogger(__name__)
 
@@ -330,6 +331,11 @@ class Anthropic(APILLM):
 
 class AnthropicSession(APILLMSession):
     pass
+
+
+class AnthropicStreamer(BaseStreamer):
+    def process_stream_chunk(self, chunk):
+        raise NotImplementedError
 
 
 class _AnthropicSession(LLMSession):

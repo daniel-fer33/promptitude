@@ -13,6 +13,7 @@ from openai import AsyncOpenAI, AsyncStream
 
 from ._llm import LLMSession, SyncSession
 from ._api_llm import APILLM, APILLMSession
+from ._streamer import BaseStreamer
 
 log = logging.getLogger(__name__)
 
@@ -519,3 +520,8 @@ class _OpenAISession(LLMSession):
             return [llm_cache[key]]
         
         return llm_cache[key]
+
+
+class OpenAIStreamer(BaseStreamer):
+    def process_stream_chunk(self, chunk):
+        raise NotImplementedError
