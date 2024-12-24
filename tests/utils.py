@@ -10,11 +10,11 @@ def get_llm(model_name, caching=False, **kwargs):
     """ Get an LLM by name.
     """
     if model_name.startswith("openai:"):
-        return get_openai_llm(model_name[7:], caching, **kwargs)
+        return get_openai_llm(model_name[7:], caching=caching, **kwargs)
     if model_name.startswith("anthropic:"):
-        return get_anthropic_llm(model_name.split(':')[-1], caching, **kwargs)
+        return get_anthropic_llm(model_name.split(':')[-1], caching=caching, **kwargs)
     elif model_name.startswith("transformers:"):
-        return get_transformers_llm(model_name[13:], caching, **kwargs)
+        return get_transformers_llm(model_name[13:], caching=caching, **kwargs)
 
 
 def get_openai_llm(model_name, caching=False, **kwargs):

@@ -47,6 +47,8 @@ class LLM(metaclass=LLMMeta):
     cache_version: int = 1  # Version of the cache to handle cache invalidation when the class implementation changes.
     default_system_prompt: str = "You are a helpful assistant."
     llm_name: str = "unknown"
+    temperature: float = 0.0
+    caching: bool = True
 
     # Serialization
     excluded_args: List[str] = []
@@ -134,11 +136,22 @@ type {{function.name}} = (_: {
     def cache(self, value: DiskCache) -> None:
         self._cache = value
 
+    @classmethod
+    def _get_init_params(cls):
+        """Retrieve the set of parameter names from the __init__ methods of a class and its base classes"""
+        init_params = set()
+        for base_cls in cls.mro():  # Iterate through the MRO
+            if '__init__' in base_cls.__dict__:
+                init_sig = inspect.signature(base_cls.__init__)
+                init_params.update(init_sig.parameters.keys())
+        return init_params - {'self', 'args', 'kwargs'}
+
     def serialize(self) -> Dict[str, Any]:
         """Serializes the LLM instance for caching or storage purposes"""
+        init_params = self._get_init_params()
+
         excluded_args = set(self.excluded_args)
         class_attribute_map = self.class_attribute_map
-        init_params = inspect.signature(self.__init__).parameters
         out = {
             'module_name': self.__module__,
             'class_name': self.__class__.__name__,
