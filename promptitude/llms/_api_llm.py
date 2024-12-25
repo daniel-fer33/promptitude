@@ -1,15 +1,19 @@
 import copy
-from typing import Any, Callable, Dict, List, Optional, Deque, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Deque, Tuple, Type, AsyncIterator
 
 from abc import abstractmethod
 import time
 import collections
 import inspect
 import asyncio
+import logging
+import re
 
 import pyparsing as pp
 
 from ._llm import LLM, LLMSession
+
+log = logging.getLogger(__name__)
 
 
 class AsyncRateLimiter:
@@ -122,42 +126,56 @@ class APILLM(LLM):
     async def _library_call(self, **kwargs: Any) -> Any:
         """Make an API call using a library (to be implemented by subclasses)."""
         call_args = self.parse_call_arguments(kwargs)
-        raise NotImplementedError("Subclasses must implement _library_call method.")
+        raise NotImplementedError("Subclasses must implement the _library_call method.")
 
     @abstractmethod
     async def _rest_call(self, **kwargs: Any) -> Any:
         """Make an API call using a REST endpoint (to be implemented by subclasses)."""
         call_args = self.parse_call_arguments(kwargs)
-        raise NotImplementedError("Subclasses must implement _rest_call method.")
+        raise NotImplementedError("Subclasses must implement the _rest_call method.")
 
     def role_start(self, role_name: str, **kwargs: Any) -> str:
-        assert self.chat_mode, "role_start() can only be used in chat mode"
+        """Generate the role start token for the chat prompt."""
+        if not self.chat_mode:
+            raise ValueError("role_start() can only be used in chat mode")
         return "<|im_start|>" + role_name + "".join([f' {k}="{v}"' for k, v in kwargs.items()]) + "\n"
 
     def role_end(self, role: Optional[str] = None) -> str:
-        assert self.chat_mode, "role_end() can only be used in chat mode"
+        """Generate the role end token for the chat prompt."""
+        if not self.chat_mode:
+            raise ValueError("role_end() can only be used in chat mode")
         return "<|im_end|>"
 
     def end_of_text(self) -> str:
         return "<|endoftext|>"
 
     def prompt_to_messages(self, prompt: str) -> List[Dict[str, Any]]:
-        messages: List[Dict[str, Any]] = []
+        if not prompt:
+            log.error("Prompt is empty or None.")
+            raise ValueError("Prompt cannot be empty or None.")
 
-        assert prompt.endswith(
-            "<|im_start|>assistant\n"), "When calling OpenAI chat models you must generate only directly inside the assistant role! The OpenAI API does not currently support partial assistant prompting."
+        try:
+            messages: List[Dict[str, Any]] = []
 
-        parsed_prompt = self.roles_grammar.parse_string(prompt)
+            if not prompt.endswith("<|im_start|>assistant\n"):
+                raise ValueError(
+                    "When calling chat models, you must generate only inside the assistant role! "
+                    "The API does not currently support partial assistant prompting."
+                )
+            parsed_prompt = self.roles_grammar.parse_string(prompt)
 
-        for role in parsed_prompt:
-            if len(role["role_content"]) > 0:
-                message: Dict[str, Any] = {'role': role["role_name"], 'content': role["role_content"]}
-                if "kwargs" in role:
-                    for k, v in role["kwargs"].items():
-                        message[k] = v
-                messages.append(message)
+            for role in parsed_prompt:
+                if len(role["role_content"]) > 0:
+                    message: Dict[str, Any] = {'role': role["role_name"], 'content': role["role_content"]}
+                    if "kwargs" in role:
+                        for k, v in role["kwargs"].items():
+                            message[k] = v
+                    messages.append(message)
 
-        return messages
+            return messages
+        except pp.ParseException as e:
+            log.error(f"Failed to parse prompt: {e}")
+            raise ValueError(f"Invalid prompt format: {e}")
 
     def parse_call_arguments(self, call_args: Dict[str, Any]) -> Dict[str, Any]:
         """Process and prepare call arguments to be passed to the API."""
@@ -178,11 +196,15 @@ class APILLM(LLM):
 
         return parsed_call_args
 
-    async def process_stream(self, gen, key, stop_regex, n):
+    async def process_stream(self, gen: AsyncIterator[str], key: Any, stop_regex: Optional[str], n: int
+                             ) -> AsyncIterator[str]:
         """Default implementation to process and cache the streamed output."""
         list_out = []
+        pattern = re.compile(stop_regex) if stop_regex else None
         async for chunk in gen:
-            # Process the chunk as needed (e.g., accumulate text)
+            if pattern and pattern.search(chunk):
+                # If stop condition met, break the loop
+                break
             list_out.append(chunk)
             yield chunk  # Yield to the caller
 
@@ -206,10 +228,13 @@ class APILLMSession(LLMSession):
             stream: Optional[bool] = None,
             logprobs: Optional[bool] = None,
             echo: bool = False,  # TODO: Remove from callers, not used here.
-            function_call=None,  # TODO: Implement or deprecate
-            **call_kwargs
+            function_call: Optional[str] = None,  # TODO: Implement or deprecate
+            **call_kwargs: Any
     ) -> Any:
         """Call the LLM with the given prompt or messages and parameters."""
+
+        if function_call not in [None, 'none']:
+            raise NotImplementedError("The 'function_call' parameter is not implemented yet.")
 
         # Ensure that exactly one of prompt or messages is provided
         if (prompt is None and messages is None) or (prompt is not None and messages is not None):
@@ -218,8 +243,10 @@ class APILLMSession(LLMSession):
         # we need to stream in order to support stop_regex
         if stream is None:
             stream = stop_regex is not None
-        assert stop_regex is None or stream, "We can only support stop_regex when stream=True!"
-        assert stop_regex is None or n == 1, "We don't yet support stop_regex combined with n > 1!"
+        if stop_regex is not None and not stream:
+            raise ValueError("We can only support stop_regex when stream=True!")
+        if stop_regex is not None and n != 1:
+            raise ValueError("We don't yet support stop_regex combined with n > 1!")
 
         # Set defaults
         if temperature is None:
@@ -246,13 +273,16 @@ class APILLMSession(LLMSession):
             # tools = extract_tools_defs(prompt)
 
             fail_count = 0
+            backoff = 1  # Start with a 1-second backoff
+            max_backoff = 60  # Set a maximum backoff time
             error_msg = None
             while True:
-                try_again = False
+                should_retry = False
                 try:
                     call_args = {
                         "model": self.llm.model_name,
                         "prompt": prompt,
+                        "messages": messages,
                         "temperature": temperature,
                         "n": n,
                         "logprobs": logprobs,
@@ -262,18 +292,28 @@ class APILLMSession(LLMSession):
                     call_out = await self.llm.caller(**call_args)
 
                 except self.llm.api_exceptions as err:
-                    await asyncio.sleep(3)
                     error_msg = str(err)
-                    try_again = True
                     fail_count += 1
+                    if fail_count > self.llm.max_retries:
+                        log.error(
+                            f"Exceeded maximum retries ({self.llm.max_retries}) for {self.llm.llm_name} API. "
+                            f"Last error: {error_msg}"
+                        )
+                        raise APIRateLimitException(
+                            f"Too many (more than {self.llm.max_retries}) {self.llm.llm_name} API errors in a row! \n"
+                            f"Last error message: {error_msg}"
+                        ) from err
+                    else:
+                        log.warning(
+                            f"API call failed for model {self.llm.model_name} with error: {error_msg}. "
+                            f"Retrying in {backoff} seconds..."
+                        )
+                        await asyncio.sleep(backoff)
+                        backoff = min(backoff * 2, max_backoff)  # Exponential backoff with a cap
+                        should_retry = True
 
-                if not try_again:
+                if not should_retry:
                     break
-
-                if fail_count > self.llm.max_retries:
-                    raise Exception(
-                        f"Too many (more than {self.llm.max_retries}) {self.llm.llm_name} API errors in a row! \n"
-                        f"Last error message: {error_msg}")
 
             if stream:
                 # Process the streamed output and cache it
@@ -288,3 +328,11 @@ class APILLMSession(LLMSession):
             return [llm_cache[key]]
 
         return llm_cache[key]
+
+
+class APILLMException(Exception):
+    """Base exception class for APILLM."""
+
+
+class APIRateLimitException(APILLMException):
+    """Exception raised when API rate limit is exceeded."""

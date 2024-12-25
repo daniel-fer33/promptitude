@@ -211,7 +211,7 @@ Hello my name is {{gen 'name' temperature=0 max_tokens=5}}.
 
     completed_task = list(completed_tasks)[0]
 
-    assert isinstance(completed_task.exception(), AssertionError), \
+    assert isinstance(completed_task.exception(), ValueError), \
         "Expect the exception to be propagated"
 
     loop.close()
