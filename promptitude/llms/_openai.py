@@ -4,6 +4,8 @@ import os
 import copy
 import asyncio
 import types
+
+import httpx
 import regex
 import logging
 import pyparsing as pp
@@ -403,7 +405,18 @@ class OpenAI(APILLM):
 
 
 class OpenAISession(APILLMSession):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize the AsyncClient
+        self.client = httpx.AsyncClient()
+
+    async def __aenter__(self) -> 'OpenAISession':
+        # Perform any setup if needed
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        # Close the AsyncClient properly
+        await self.client.aclose()
 
 
 class _OpenAISession(LLMSession):

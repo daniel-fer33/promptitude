@@ -534,7 +534,7 @@ class Program:
             if self.llm is None:
                 await self._executor.run(None)
             else:
-                with self.llm.session(asynchronous=True) as llm_session:
+                async with self.llm.session(asynchronous=True) as llm_session:
                     await self._executor.run(llm_session)
             self._text = self._variables["@raw_prefix"]
 

@@ -4,6 +4,8 @@ import os
 import copy
 import asyncio
 import types
+
+import httpx
 import regex
 import logging
 import pyparsing as pp
@@ -345,7 +347,18 @@ class Anthropic(APILLM):
 
 
 class AnthropicSession(APILLMSession):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize the AsyncClient
+        self.client = httpx.AsyncClient()
+
+    async def __aenter__(self) -> 'AnthropicSession':
+        # Perform any setup if needed
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        # Close the AsyncClient properly
+        await self.client.aclose()
 
 
 class AnthropicStreamer(BaseStreamer):

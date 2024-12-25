@@ -178,12 +178,21 @@ class LLMSession:
     def __enter__(self) -> LLMSession:
         return self
 
-    async def __call__(self, *args, **kwargs) -> Any:
-        return self.llm(*args, **kwargs)
-
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException],
+    def __exit__(self, exc_type: Optional[Type[BaseException]],
+                 exc_value: Optional[BaseException],
                  traceback: Optional[TracebackType]) -> Optional[bool]:
         pass
+
+    async def __aenter__(self) -> LLMSession:
+        return self
+
+    async def __aexit__(self, exc_type: Optional[Type[BaseException]],
+                        exc_value: Optional[BaseException],
+                        traceback: Optional[TracebackType]) -> Optional[bool]:
+        pass
+
+    async def __call__(self, *args, **kwargs) -> Any:
+        return self.llm(*args, **kwargs)
 
     def _gen_key(self, args_dict: Dict[str, Any]) -> str:
         """Generates a unique key for caching based on the arguments."""
@@ -214,25 +223,54 @@ class SyncSession:
     def __init__(self, session: LLMSession) -> None:
         self._session = session
 
-    def __enter__(self) -> SyncSession:
+    def __enter__(self) -> 'SyncSession':
         self._session.__enter__()
         return self
 
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException],
-                 traceback: Optional[TracebackType]) -> Optional[bool]:
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType]
+    ) -> Optional[bool]:
         return self._session.__exit__(exc_type, exc_value, traceback)
 
     def __call__(self, *args, **kwargs) -> Any:
+        return self._run_sync(self._session.__call__, *args, **kwargs)
+
+    def _run_sync(self, coro_function, *args, **kwargs) -> Any:
         try:
-            loop = asyncio.get_running_loop()
+            loop = asyncio.get_event_loop()
         except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(self._session.__call__(*args, **kwargs))
+            # No event loop; create a new one
+            return asyncio.run(coro_function(*args, **kwargs))
         else:
-            # If the event loop is already running, schedule the coroutine and wait for it
-            future = asyncio.ensure_future(self._session.__call__(*args, **kwargs))
-            return loop.run_until_complete(future)
+            if loop.is_running():
+                # An event loop is already running in this thread
+                # Run the coroutine in a new thread to avoid interfering with the existing loop
+                return self._run_coroutine_in_new_thread(coro_function, *args, **kwargs)
+            else:
+                # No running event loop; use this loop to run the coroutine
+                return loop.run_until_complete(coro_function(*args, **kwargs))
+    @staticmethod
+    def _run_coroutine_in_new_thread(coro_function, *args, **kwargs) -> Any:
+        result = None
+        exception = None
+
+        def thread_target():
+            nonlocal result, exception
+            try:
+                result = asyncio.run(coro_function(*args, **kwargs))
+            except Exception as e:
+                exception = e
+
+        thread = threading.Thread(target=thread_target)
+        thread.start()
+        thread.join()
+
+        if exception:
+            raise exception
+        return result
 
 
 class CallableAnswer:

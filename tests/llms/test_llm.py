@@ -1,6 +1,8 @@
 import unittest
 import threading
 import inspect
+import asyncio
+
 from promptitude.llms._llm import (
     LLM,
     LLMMeta,
@@ -270,3 +272,32 @@ class TestLLM(unittest.TestCase):
         llm = DummyLLM()
         expected_regex = r"\n?\n?```typescript\nfunctions.[^\(]+\(.*?\)```"
         self.assertEqual(llm.function_call_stop_regex, expected_regex)
+
+    def test_sync_session_with_existing_event_loop(self):
+        """Test that SyncSession works correctly when an event loop is already running."""
+        llm = DummyLLM()
+
+        results = []
+        exceptions = []
+
+        async def test_coroutine():
+            class MockLLMSession(LLMSession):
+                async def __call__(self, *args, **kwargs):
+                    # Simulate an async call with a slight delay
+                    await asyncio.sleep(0.1)
+                    return llm(*args, **kwargs)
+
+            try:
+                session = SyncSession(MockLLMSession(llm))
+                result = session("Test prompt")
+                results.append(result)
+            except Exception as e:
+                exceptions.append(e)
+
+        asyncio.run(test_coroutine())
+
+        if exceptions:
+            raise exceptions[0]
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0], "This is a test response.")
