@@ -92,7 +92,7 @@ class APILLM(LLM):
     async def _library_call(self, **kwargs: Any) -> Any:
         """Make an API call using a library (to be implemented by subclasses)."""
         call_args = self.parse_call_arguments(kwargs)
-        raise NotImplementedError("Subclasses must implement _rest_call method.")
+        raise NotImplementedError("Subclasses must implement _library_call method.")
 
     @abstractmethod
     async def _rest_call(self, **kwargs: Any) -> Any:
@@ -181,7 +181,7 @@ class APILLMSession(LLMSession):
 
     async def __call__(
             self,
-            prompt: str,
+            prompt: Optional[str] = None,
             messages: Optional[List[Dict[str, Any]]] = None,
             temperature: Optional[float] = None,
             n: int = 1,
