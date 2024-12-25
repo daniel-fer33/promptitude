@@ -20,23 +20,21 @@ class LLMMeta(ABCMeta):
     Ensures that all instances of an LLM subclass share the same cache,
     facilitating caching across different instances.
     """
+    llm_name: str
 
     def __init__(cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs) -> None:
         super().__init__(name, bases, namespace)
         cls._cache = None
-        cls._lock = threading.Lock()
 
     @property
     def cache(cls) -> DiskCache:
-        with cls._lock:
-            if cls._cache is None:
-                cls._cache = DiskCache(cls.llm_name)
+        if cls._cache is None:
+            cls._cache = DiskCache(cls.llm_name)
         return cls._cache
 
     @cache.setter
     def cache(cls, value: DiskCache) -> None:
-        with cls._lock:
-            cls._cache = value
+        cls._cache = value
 
 
 class LLM(metaclass=LLMMeta):
