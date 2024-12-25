@@ -56,8 +56,14 @@ class LLM(metaclass=LLMMeta):
         self.chat_mode = True  # by default models are in role-based chat mode
         self.model_name = "unknown"
 
-        # these should all start with the @ symbol and are variables programs can use when running with this LLM
-        self.tool_def = guidance("""
+        # Initialize _tool_def to None and create it lazily when accessed
+        self._tool_def = None
+        self.function_call_stop_regex = r"\n?\n?```typescript\nfunctions.[^\(]+\(.*?\)```"
+
+    @property
+    def tool_def(self):
+        if self._tool_def is None:
+            self._tool_def = guidance("""
 # Tools
 
 {{#if len(functions) > 0~}}
@@ -78,7 +84,7 @@ type {{function.name}} = (_: {
 {{/each~}}
 } // namespace functions
 {{~/if~}}""", functions=[])
-        self.function_call_stop_regex = r"\n?\n?```typescript\nfunctions.[^\(]+\(.*?\)```"
+        return self._tool_def
 
     def __call__(self, *args, **kwargs) -> Any:
         """Generates a response from the LLM. Subclasses must implement this method."""
