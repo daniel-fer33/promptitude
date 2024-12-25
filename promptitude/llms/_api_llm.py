@@ -12,6 +12,37 @@ import pyparsing as pp
 from ._llm import LLM, LLMSession
 
 
+class AsyncRateLimiter:
+    def __init__(self, max_rate: float, time_period: float):
+        """ Initialize the rate limiter. """
+        self._max_rate = max_rate  # The maximum number of calls allowed in the time period.
+        self._time_period = time_period   # The time period in seconds during which max_rate tokens can be used.
+        self._calls = max_rate
+        self._lock = asyncio.Lock()
+        self._last_check = time.monotonic()
+
+    async def acquire(self):
+        """ Acquire permission to proceed with an API call. """
+        async with self._lock:
+            current_time = time.monotonic()
+            elapsed = current_time - self._last_check
+            self._last_check = current_time
+
+            # Refill tokens based on elapsed time
+            refill = (elapsed / self._time_period) * self._max_rate
+            self._calls = min(self._calls + refill, self._max_rate)
+
+            if self._calls >= 1:
+                # Consume a call and proceed
+                self._calls -= 1
+            else:
+                # Calculate wait time until a new token is available
+                wait_time = ((1 - self._calls) * self._time_period) / self._max_rate
+                await asyncio.sleep(wait_time)
+                self._last_check = time.monotonic()
+                self._calls = 0  # Calls just used
+
+
 class APILLM(LLM):
     """Abstract base class for API-based LLMs"""
     _api_exclude_arguments: Optional[List[str]] = None  # Exclude arguments to pass to the API
@@ -75,8 +106,7 @@ class APILLM(LLM):
 
         self.rest_call: bool = rest_call
 
-        self.call_history: Deque[float] = collections.deque()
-        self.current_time: float = time.time()
+        self.rate_limiter = AsyncRateLimiter(max_rate=max_calls_per_min, time_period=60.0)
 
         self.caller: Callable[..., Any]
         self._rest_headers: Dict[str, str] = {}
@@ -128,21 +158,6 @@ class APILLM(LLM):
                 messages.append(message)
 
         return messages
-
-    def add_call(self) -> None:
-        """Add the current call timestamp to call history for rate limiting."""
-        now: float = time.time()
-        # Append the timestamp to the right of the deque
-        self.call_history.append(now)
-
-    def count_calls(self) -> int:
-        """Count the number of API calls in the last minute."""
-        now: float = time.time()
-        # Remove the timestamps that are older than 60 seconds from the left of the deque
-        while self.call_history and self.call_history[0] < now - 60:
-            self.call_history.popleft()
-        # Return the length of the deque as the number of calls
-        return len(self.call_history)
 
     def parse_call_arguments(self, call_args: Dict[str, Any]) -> Dict[str, Any]:
         """Process and prepare call arguments to be passed to the API."""
@@ -225,8 +240,7 @@ class APILLMSession(LLMSession):
         # check the cache
         if key not in llm_cache or caching is False or (caching is not True and not self.llm.caching):
             # ensure we don't exceed the rate limit
-            while self.llm.count_calls() > self.llm.max_calls_per_min:
-                await asyncio.sleep(1)
+            await self.llm.rate_limiter.acquire()
 
             # TODO: Add tools
             # tools = extract_tools_defs(prompt)
@@ -236,7 +250,6 @@ class APILLMSession(LLMSession):
             while True:
                 try_again = False
                 try:
-                    self.llm.add_call()
                     call_args = {
                         "model": self.llm.model_name,
                         "prompt": prompt,
