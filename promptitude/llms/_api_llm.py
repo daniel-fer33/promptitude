@@ -55,6 +55,8 @@ class APILLM(LLM):
         # Initialize variables
         self._api_exclude_arguments = self._api_exclude_arguments or []
         self._api_rename_arguments = self._api_rename_arguments or {}
+        # Exclude 'prompt' and 'messages'
+        self._api_exclude_arguments += ['prompt', 'messages']
 
         self.api_key: Optional[str] = api_key
         self.api_type: Optional[str] = api_type
@@ -144,10 +146,21 @@ class APILLM(LLM):
 
     def parse_call_arguments(self, call_args: Dict[str, Any]) -> Dict[str, Any]:
         """Process and prepare call arguments to be passed to the API."""
+        # Exclude 'prompt' and 'messages' from being directly passed to the API
         parsed_call_args = {
             self._api_rename_arguments.get(k, k): v for k, v in call_args.items()
             if k not in self._api_exclude_arguments and v is not None
         }
+
+        # Handle the case when 'messages' are provided
+        if 'messages' in call_args and call_args['messages'] is not None:
+            parsed_call_args['messages'] = call_args['messages']
+        elif 'prompt' in call_args and call_args['prompt'] is not None:
+            # Convert prompt to messages
+            parsed_call_args['messages'] = self.prompt_to_messages(call_args['prompt'])
+        else:
+            raise ValueError("Either 'prompt' or 'messages' must be provided.")
+
         return parsed_call_args
 
     async def process_stream(self, gen, key, stop_regex, n):
@@ -169,6 +182,7 @@ class APILLMSession(LLMSession):
     async def __call__(
             self,
             prompt: str,
+            messages: Optional[List[Dict[str, Any]]] = None,
             temperature: Optional[float] = None,
             n: int = 1,
             stop_regex: Optional[str] = None,
@@ -180,7 +194,11 @@ class APILLMSession(LLMSession):
             function_call=None,  # TODO: Implement or deprecate
             **call_kwargs
     ) -> Any:
-        """Call the LLM with the given prompt and parameters."""
+        """Call the LLM with the given prompt or messages and parameters."""
+
+        # Ensure that exactly one of prompt or messages is provided
+        if (prompt is None and messages is None) or (prompt is not None and messages is not None):
+            raise ValueError("Exactly one of 'prompt' or 'messages' must be provided.")
 
         # we need to stream in order to support stop_regex
         if stream is None:

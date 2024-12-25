@@ -299,11 +299,19 @@ class Anthropic(APILLM):
             raise ValueError(f"Anthropic doesn't support more than one chat completion (n>1={n})")
         assert 'n' in self._api_exclude_arguments
 
-        # Process messages
-        messages = self.prompt_to_messages(call_kwargs['prompt'])
+        # Handle messages
+        if 'messages' in call_kwargs and call_kwargs['messages'] is not None:
+            messages = call_kwargs['messages']
+        elif 'prompt' in call_kwargs and call_kwargs['prompt'] is not None:
+            messages = self.prompt_to_messages(call_kwargs['prompt'])
+        else:
+            raise ValueError("Either 'prompt' or 'messages' must be provided.")
         system_msgs = [s1['content'] for s1 in messages if s1['role'] == 'system']
         call_kwargs['system'] = system_msgs[-1] if len(system_msgs) > 0 else None
         call_kwargs['messages'] = [s1 for s1 in messages if s1['role'] != 'system']
+
+        # Remove 'prompt' from call_kwargs if present
+        call_kwargs.pop('prompt', None)
         assert 'prompt' in self._api_exclude_arguments
 
         # Parse call arguments

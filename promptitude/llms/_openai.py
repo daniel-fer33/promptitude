@@ -361,9 +361,17 @@ class OpenAI(APILLM):
         # Filter non supported call arguments
         pass
 
-        # Process messages
-        messages = self.prompt_to_messages(call_kwargs['prompt'])
+        # Handle messages
+        if 'messages' in call_kwargs and call_kwargs['messages'] is not None:
+            messages = call_kwargs['messages']
+        elif 'prompt' in call_kwargs and call_kwargs['prompt'] is not None:
+            messages = self.prompt_to_messages(call_kwargs['prompt'])
+        else:
+            raise ValueError("Either 'prompt' or 'messages' must be provided.")
         call_kwargs['messages'] = messages
+
+        # Remove 'prompt' from call_kwargs if present
+        call_kwargs.pop('prompt', None)
         assert 'prompt' in self._api_exclude_arguments
 
         # Parse call arguments
