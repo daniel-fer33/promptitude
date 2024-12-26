@@ -52,7 +52,7 @@ def test_comment_ws_strip():
     assert str(prompt()) == "Hello,Bob!Hello,Bob!"
 
 def test_escape_command():
-    prompt = guidance("Hello, \{{command}} Bob!")
+    prompt = guidance(r"Hello, \{{command}} Bob!")
     assert str(prompt()) == "Hello, {{command}} Bob!"
 
 def test_indexing():
