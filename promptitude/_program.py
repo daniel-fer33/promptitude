@@ -263,9 +263,6 @@ class Program:
     def __repr__(self):
         return self.text
     
-    def __getitem__(self, key):
-        return self._variables[key]
-    
     def _interface_event(self, msg):
         """ Handle an event from the front end.
         """
@@ -522,38 +519,43 @@ class Program:
         in this process the current template remains valid.
         """
 
-        log.debug(f"Executing program (self.async_mode={self.async_mode}, self.silent={self.silent}, self._displaying_html={self._displaying_html})")
-        
+        log.debug(f"Executing program (self.async_mode={self.async_mode}, self.silent={self.silent}, "
+                  f"self._displaying_html={self._displaying_html})")
+
         # if we are already displaying html, we need to yield to the event loop so the jupyter comm can initialize
         if self._displaying_html:
             await asyncio.sleep(0)
-        
+
         # run the program and capture the output
         clear_display_output = True
-        try:
-            if self.llm is None:
+
+        if self.llm is None:
+            # No LLM session needed
+            try:
                 await self._executor.run(None)
-            else:
+                self._text = self._variables["@raw_prefix"]
+            except Exception as exception:
+                self._exception = exception
+                clear_display_output = False
+        else:
+            # Use LLM session
+            try:
                 async with self.llm.session(asynchronous=True) as llm_session:
                     await self._executor.run(llm_session)
-            self._text = self._variables["@raw_prefix"]
+                    self._text = self._variables["@raw_prefix"]
+            except Exception as exception:
+                self._exception = exception
+                clear_display_output = False
 
-        # if the execution failed, capture the exception so it can be re-raised
-        # in the main coroutine
-        except Exception as exception:
-            self._exception = exception
-            clear_display_output = False
+        # delete the executor and so mark the program as not executing
+        self._executor = None
 
-        finally:
-            # delete the executor and so mark the program as not executing
-            self._executor = None
+        # update the display with the final output
+        self.update_display(last=True, clear_output=clear_display_output)
+        await self.update_display.done()
 
-            # update the display with the final output
-            self.update_display(last=True, clear_output=clear_display_output)
-            await self.update_display.done()
-
-            # fire an event noting that execution is complete (this will release any await calls waiting on the program)
-            self._execute_complete.set()
+        # fire an event noting that execution is complete (this will release any await calls waiting on the program)
+        self._execute_complete.set()
 
     def __getitem__(self, key):
         return self._variables[key]

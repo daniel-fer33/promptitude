@@ -200,7 +200,7 @@ class LLMSession:
 
     def _gen_key(self, args_dict: Dict[str, Any]) -> str:
         """Generates a unique key for caching based on the arguments."""
-        del args_dict["self"]  # skip the "self" arg
+        args_dict.pop("self", None)  # Remove 'self' if present
         return "_---_".join([str(v) for v in (
                 [args_dict[k] for k in args_dict] + [self.llm.model_name, self.llm.__class__.__name__,
                                                      self.llm.cache_version])])

@@ -202,11 +202,11 @@ class APILLM(LLM):
         list_out = []
         pattern = re.compile(stop_regex) if stop_regex else None
         async for chunk in gen:
+            list_out.append(chunk)
+            yield chunk  # Yield to the caller
             if pattern and pattern.search(chunk):
                 # If stop condition met, break the loop
                 break
-            list_out.append(chunk)
-            yield chunk  # Yield to the caller
 
         # Cache the complete output
         self.cache[key] = list_out
@@ -294,7 +294,7 @@ class APILLMSession(LLMSession):
                 except self.llm.api_exceptions as err:
                     error_msg = str(err)
                     fail_count += 1
-                    if fail_count > self.llm.max_retries:
+                    if fail_count >= self.llm.max_retries:
                         log.error(
                             f"Exceeded maximum retries ({self.llm.max_retries}) for {self.llm.llm_name} API. "
                             f"Last error: {error_msg}"

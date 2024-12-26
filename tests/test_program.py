@@ -12,8 +12,6 @@ def test_chat_stream():
     """
 
     import asyncio
-    loop = asyncio.new_event_loop()
-
     guidance.llm = get_llm("openai:gpt-3.5-turbo")
 
     async def f():
@@ -27,15 +25,13 @@ You are a helpful assistent.
 {{gen 'answer' max_tokens=10 stream=True}}""")
         out = await chat(command="How do I create a Fasttokenizer with hugging face auto?")
         assert len(out["answer"]) > 0
-    loop.run_until_complete(f())
+    asyncio.run(f())
 
 def test_chat_display():
     """ Test the behavior of `stream=True` for an openai chat endpoint.
     """
 
     import asyncio
-    loop = asyncio.new_event_loop()
-
     guidance.llm = get_llm("openai:gpt-3.5-turbo")
 
     async def f():
@@ -49,7 +45,7 @@ You are a helpful assistent.
 {{gen 'answer' max_tokens=10}}""")
         out = await chat(command="How do I create a Fasttokenizer with hugging face auto?")
         assert len(out["answer"]) > 0
-    loop.run_until_complete(f())
+    asyncio.run(f())
 
 def test_agents():
     """Test agents, calling prompt twice"""
@@ -89,8 +85,6 @@ def test_stream_loop_async(llm):
     """
 
     import asyncio
-    loop = asyncio.new_event_loop()
-
     llm = get_llm(llm)
 
     async def f():
@@ -105,7 +99,7 @@ def test_stream_loop_async(llm):
         assert len(partials) > 1
         assert len(partials[0]) < 5
         assert len(partials[-1]) == 5
-    loop.run_until_complete(f())
+    asyncio.run(f())
 
 @pytest.mark.parametrize("llm", ["openai:gpt-3.5-turbo", ])
 def test_stream_loop(llm):
@@ -134,8 +128,6 @@ def test_stream_loop_async(llm):
     """
 
     import asyncio
-    loop = asyncio.new_event_loop()
-
     llm = get_llm(llm)
 
     async def f():
@@ -156,12 +148,14 @@ Generate a list of 5 company names.
         assert len(partials) > 1
         assert len(partials[0]) < 5
         assert len(partials[-1]) == 5
-    loop.run_until_complete(f())
+    asyncio.run(f())
+
 
 def test_logging_on():
     program = guidance("""This is a test prompt{{#if flag}} yes.{{/if}}""", log=True)
     executed_program = program(flag=True)
     assert len(executed_program.log) > 0
+
 
 def test_logging_off():
     program = guidance("""This is a test prompt{{#if flag}} yes.{{/if}}""", log=False)
