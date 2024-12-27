@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Union, Type
+from typing import Any, Dict, List, Optional, Union, Type, TypeVar, Tuple
 from types import TracebackType
 
 import asyncio
@@ -23,7 +23,7 @@ class LLMMeta(ABCMeta):
     """
     llm_name: str
 
-    def __init__(cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs) -> None:
+    def __init__(cls, name: str, bases: Tuple[Type, ...], namespace: Dict[str, Any], **kwargs) -> None:
         super().__init__(name, bases, namespace)
         cls._cache = None
 
