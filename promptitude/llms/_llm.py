@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Union, Type
+from typing import Any, Dict, List, Optional, Union, Type, TypeVar, Tuple
 from types import TracebackType
 
 import asyncio
@@ -7,6 +7,7 @@ import re
 import json
 import inspect
 import threading
+import concurrent.futures
 from abc import ABCMeta, abstractmethod
 
 from promptitude import guidance
@@ -20,23 +21,21 @@ class LLMMeta(ABCMeta):
     Ensures that all instances of an LLM subclass share the same cache,
     facilitating caching across different instances.
     """
+    llm_name: str
 
-    def __init__(cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs) -> None:
+    def __init__(cls, name: str, bases: Tuple[Type, ...], namespace: Dict[str, Any], **kwargs) -> None:
         super().__init__(name, bases, namespace)
         cls._cache = None
-        cls._lock = threading.Lock()
 
     @property
     def cache(cls) -> DiskCache:
-        with cls._lock:
-            if cls._cache is None:
-                cls._cache = DiskCache(cls.llm_name)
+        if cls._cache is None:
+            cls._cache = DiskCache(cls.llm_name)
         return cls._cache
 
     @cache.setter
     def cache(cls, value: DiskCache) -> None:
-        with cls._lock:
-            cls._cache = value
+        cls._cache = value
 
 
 class LLM(metaclass=LLMMeta):
@@ -47,6 +46,8 @@ class LLM(metaclass=LLMMeta):
     cache_version: int = 1  # Version of the cache to handle cache invalidation when the class implementation changes.
     default_system_prompt: str = "You are a helpful assistant."
     llm_name: str = "unknown"
+    temperature: float = 0.0
+    caching: bool = True
 
     # Serialization
     excluded_args: List[str] = []
@@ -56,8 +57,14 @@ class LLM(metaclass=LLMMeta):
         self.chat_mode = True  # by default models are in role-based chat mode
         self.model_name = "unknown"
 
-        # these should all start with the @ symbol and are variables programs can use when running with this LLM
-        self.tool_def = guidance("""
+        # Initialize _tool_def to None and create it lazily when accessed
+        self._tool_def = None
+        self.function_call_stop_regex = r"\n?\n?```typescript\nfunctions.[^\(]+\(.*?\)```"
+
+    @property
+    def tool_def(self):
+        if self._tool_def is None:
+            self._tool_def = guidance("""
 # Tools
 
 {{#if len(functions) > 0~}}
@@ -78,7 +85,7 @@ type {{function.name}} = (_: {
 {{/each~}}
 } // namespace functions
 {{~/if~}}""", functions=[])
-        self.function_call_stop_regex = r"\n?\n?```typescript\nfunctions.[^\(]+\(.*?\)```"
+        return self._tool_def
 
     def __call__(self, *args, **kwargs) -> Any:
         """Generates a response from the LLM. Subclasses must implement this method."""
@@ -134,11 +141,22 @@ type {{function.name}} = (_: {
     def cache(self, value: DiskCache) -> None:
         self._cache = value
 
+    @classmethod
+    def _get_init_params(cls):
+        """Retrieve the set of parameter names from the __init__ methods of a class and its base classes"""
+        init_params = set()
+        for base_cls in cls.mro():  # Iterate through the MRO
+            if '__init__' in base_cls.__dict__:
+                init_sig = inspect.signature(base_cls.__init__)
+                init_params.update(init_sig.parameters.keys())
+        return init_params - {'self', 'args', 'kwargs'}
+
     def serialize(self) -> Dict[str, Any]:
         """Serializes the LLM instance for caching or storage purposes"""
+        init_params = self._get_init_params()
+
         excluded_args = set(self.excluded_args)
         class_attribute_map = self.class_attribute_map
-        init_params = inspect.signature(self.__init__).parameters
         out = {
             'module_name': self.__module__,
             'class_name': self.__class__.__name__,
@@ -165,16 +183,25 @@ class LLMSession:
     def __enter__(self) -> LLMSession:
         return self
 
-    async def __call__(self, *args, **kwargs) -> Any:
-        return self.llm(*args, **kwargs)
-
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException],
+    def __exit__(self, exc_type: Optional[Type[BaseException]],
+                 exc_value: Optional[BaseException],
                  traceback: Optional[TracebackType]) -> Optional[bool]:
         pass
 
+    async def __aenter__(self) -> LLMSession:
+        return self
+
+    async def __aexit__(self, exc_type: Optional[Type[BaseException]],
+                        exc_value: Optional[BaseException],
+                        traceback: Optional[TracebackType]) -> Optional[bool]:
+        pass
+
+    async def __call__(self, *args, **kwargs) -> Any:
+        return self.llm(*args, **kwargs)
+
     def _gen_key(self, args_dict: Dict[str, Any]) -> str:
         """Generates a unique key for caching based on the arguments."""
-        del args_dict["self"]  # skip the "self" arg
+        args_dict.pop("self", None)  # Remove 'self' if present
         return "_---_".join([str(v) for v in (
                 [args_dict[k] for k in args_dict] + [self.llm.model_name, self.llm.__class__.__name__,
                                                      self.llm.cache_version])])
@@ -201,25 +228,52 @@ class SyncSession:
     def __init__(self, session: LLMSession) -> None:
         self._session = session
 
-    def __enter__(self) -> SyncSession:
+    def __enter__(self) -> 'SyncSession':
         self._session.__enter__()
         return self
 
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException],
-                 traceback: Optional[TracebackType]) -> Optional[bool]:
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType]
+    ) -> Optional[bool]:
         return self._session.__exit__(exc_type, exc_value, traceback)
 
     def __call__(self, *args, **kwargs) -> Any:
+        return self._run_sync(self._session.__call__, *args, **kwargs)
+
+    def _run_sync(self, coro_function, *args, **kwargs) -> Any:
         try:
-            loop = asyncio.get_running_loop()
+            loop = asyncio.get_event_loop()
         except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(self._session.__call__(*args, **kwargs))
+            # No event loop; create a new one
+            return asyncio.run(coro_function(*args, **kwargs))
         else:
-            # If the event loop is already running, schedule the coroutine and wait for it
-            future = asyncio.ensure_future(self._session.__call__(*args, **kwargs))
-            return loop.run_until_complete(future)
+            if loop.is_running():
+                # An event loop is already running in this thread
+                # Run the coroutine in a new thread to avoid interfering with the existing loop
+                return self._run_coroutine_in_new_thread(coro_function, *args, **kwargs)
+            else:
+                # No running event loop; use this loop to run the coroutine
+                return loop.run_until_complete(coro_function(*args, **kwargs))
+
+    @staticmethod
+    def _run_coroutine_in_new_thread(coro_function, *args, **kwargs) -> Any:
+        # Define a function to run the coroutine
+        def run_coroutine():
+            return asyncio.run(coro_function(*args, **kwargs))
+
+        # Use a ThreadPoolExecutor to manage the thread
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            # Submit the function to the executor without calling it immediately
+            future = executor.submit(run_coroutine)
+            try:
+                result = future.result()
+            except Exception as e:
+                # Raise the exception from the thread in the main thread
+                raise e
+            return result
 
 
 class CallableAnswer:

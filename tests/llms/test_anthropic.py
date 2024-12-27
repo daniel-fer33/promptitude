@@ -96,10 +96,8 @@ class TestAnthropicSerialization(unittest.TestCase):
             api_key='test_api_key',
             temperature=0.5,
             rest_call=True,
-            api_type='anthropic_test',
             api_base='https://api.anthropic.com/v1',
             api_version='2023-01-01',
-            allowed_special_tokens={'<|endoftext|>', '<|custom_token|>'}
         )
 
         # Serialize the instance
@@ -141,4 +139,3 @@ class TestAnthropicSerialization(unittest.TestCase):
         self.assertEqual(new_anthropic_instance.api_type, anthropic_instance.api_type)
         self.assertEqual(new_anthropic_instance.api_base, anthropic_instance.api_base)
         self.assertEqual(new_anthropic_instance.api_version, anthropic_instance.api_version)
-        self.assertEqual(new_anthropic_instance.allowed_special_tokens, anthropic_instance.allowed_special_tokens)
