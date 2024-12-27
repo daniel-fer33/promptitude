@@ -7,6 +7,7 @@ import re
 import json
 import inspect
 import threading
+import concurrent.futures
 from abc import ABCMeta, abstractmethod
 
 from promptitude import guidance
@@ -256,25 +257,23 @@ class SyncSession:
             else:
                 # No running event loop; use this loop to run the coroutine
                 return loop.run_until_complete(coro_function(*args, **kwargs))
+
     @staticmethod
     def _run_coroutine_in_new_thread(coro_function, *args, **kwargs) -> Any:
-        result = None
-        exception = None
+        # Define a function to run the coroutine
+        def run_coroutine():
+            return asyncio.run(coro_function(*args, **kwargs))
 
-        def thread_target():
-            nonlocal result, exception
+        # Use a ThreadPoolExecutor to manage the thread
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            # Submit the function to the executor without calling it immediately
+            future = executor.submit(run_coroutine)
             try:
-                result = asyncio.run(coro_function(*args, **kwargs))
+                result = future.result()
             except Exception as e:
-                exception = e
-
-        thread = threading.Thread(target=thread_target)
-        thread.start()
-        thread.join()
-
-        if exception:
-            raise exception
-        return result
+                # Raise the exception from the thread in the main thread
+                raise e
+            return result
 
 
 class CallableAnswer:
