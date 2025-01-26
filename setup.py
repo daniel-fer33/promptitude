@@ -61,7 +61,8 @@ setup(
             'pytest',
             'transformers',
             'torch',
-            'pytest-cov'
+            'pytest-cov',
+            'python-dotenv'
         ]
     }
 )
