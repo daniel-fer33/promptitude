@@ -174,7 +174,7 @@ def extract_function_defs(prompt):
 
 class OpenAI(APILLM):
     llm_name: str = "openai"
-    chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|o1-preview|o1-mini)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
+    chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|o1-preview|o1-mini|o1|chatgpt-4o-latest)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
     default_allowed_special_tokens: List[str] = ["<|endoftext|>", "<|endofprompt|>"]
 
     # API
@@ -244,7 +244,7 @@ class OpenAI(APILLM):
         # Currently (17/09/2024) tiktoken doesn't support openai "o1" models.
         # https://github.com/openai/tiktoken/issues/337
         from tiktoken.model import MODEL_PREFIX_TO_ENCODING, MODEL_TO_ENCODING
-        MODEL_PREFIX_TO_ENCODING.update({"o1-": "o200k_base"})
+        MODEL_PREFIX_TO_ENCODING.update({"o1": "o200k_base", "chatgpt-4o": "o200k_base"})
         if encoding_name is None:
             encoding_name = tiktoken.encoding_for_model(model).name
         self._encoding_name = encoding_name
