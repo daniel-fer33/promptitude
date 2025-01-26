@@ -349,8 +349,8 @@ class Program:
         if new_program.async_mode:
             loop = asyncio.get_event_loop()
             assert loop.is_running(), "The program is in async mode but there is no asyncio event loop running! Start one and try again."
-            update_task = loop.create_task(new_program.update_display.run()) # start the display updater
-            execute_task = loop.create_task(new_program.execute())
+            update_task = loop.create_task(new_program.update_display.run(), name="Update Display") # start the display updater
+            execute_task = loop.create_task(new_program.execute(), name="Execute Program")
             new_program._tasks.append(update_task)
             new_program._tasks.append(execute_task)
 
@@ -364,7 +364,7 @@ class Program:
                 pass
             
             loop = asyncio.new_event_loop()
-            update_task = loop.create_task(new_program.update_display.run())  # start the display updater
+            update_task = loop.create_task(new_program.update_display.run(), name="Update Display (not async_mode)")  # start the display updater
             new_program._tasks.append(update_task)
             if new_program.stream:
                 return self._stream_run(loop, new_program)
@@ -387,7 +387,7 @@ class Program:
         """This feels a bit hacky at the moment. TODO: clean this up."""
 
         # add the program execution to the event loop
-        execute_task = loop.create_task(new_program.execute())
+        execute_task = loop.create_task(new_program.execute(), neme="Stream Run Execute Program")
         new_program._tasks.append(execute_task)
 
         # run the event loop until the program is done executing
