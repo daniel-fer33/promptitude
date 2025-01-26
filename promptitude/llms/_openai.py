@@ -408,10 +408,11 @@ class OpenAISession(APILLMSession):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Initialize the AsyncClient
-        self.client = httpx.AsyncClient()
+        #self.client = httpx.AsyncClient()
 
     async def __aenter__(self) -> 'OpenAISession':
-        # Perform any setup if needed
+        # Initialize the AsyncClient
+        self.client = httpx.AsyncClient()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
