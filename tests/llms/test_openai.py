@@ -1,6 +1,7 @@
 import unittest
 import re
 import importlib
+import pytest
 
 from promptitude import guidance
 from promptitude.llms import OpenAI
@@ -29,7 +30,9 @@ def test_chat_model_pattern():
         'o1-preview',
         'o1-preview-2024-09-12',
         'o1-mini',
-        'o1-mini-2024-09-12'
+        'o1-mini-2024-09-12',
+        'o1',
+        'chatgpt-4o-latest'
     ]
 
     chat_model_pattern = guidance.llms.OpenAI.chat_model_pattern
@@ -95,6 +98,39 @@ Indeed
     out = chat_loop()
     assert str(out) == '<|im_start|>system\nYou are a helpful assistant<|im_end|><|im_start|>user\nThis is great!<|im_end|><|im_start|>assistant\nIndeed<|im_end|>'
 
+@pytest.mark.parametrize("llm_name", [
+    "openai:gpt-3.5-turbo",
+    "openai:gpt-4o-mini",
+    #"openai:o1",
+    "openai:chatgpt-4o-latest",
+])
+def test_models(llm_name):
+    guidance.llm = get_llm(llm_name)
+
+    chat_loop = guidance('''
+    {{#system~}}
+    You are a helpful assistant
+    {{~/system}}
+
+    {{#user~}}
+    Hello!
+    {{~/user}}
+
+    {{#assistant~}}
+    {{gen 'response' temperature=0 max_tokens=3}}
+    {{~/assistant}}
+    
+    {{#user~}}
+    Hello again!
+    {{~/user}}
+
+    {{#assistant~}}
+    {{gen 'response' temperature=0 max_tokens=3 llm_alt_model=alt_model }}
+    {{~/assistant}}
+    ''')
+
+    out = chat_loop(alt_model=llm_name.split(':')[1])
+    assert 'response' in out.variables()
 
 class TestOpenAISerialization(unittest.TestCase):
     def test_serialize(self):
