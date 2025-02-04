@@ -1,8 +1,17 @@
 import pyparsing as pp
 
-pp.ParserElement.enable_packrat()
+# pp.ParserElement.enable_packrat()
 # pp.enable_diag(pp.Diagnostics.enable_debug_on_named_expressions)
 # pp.autoname_elements()
+
+
+def enable_pyparsing_cache():
+    pp.ParserElement.enable_packrat()
+
+
+def disable_pyparsing_cache():
+    pp.ParserElement.enable_packrat(0)
+
 
 class SavedTextNode:
     """A node that saves the text it matches."""
