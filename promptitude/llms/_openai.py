@@ -380,7 +380,7 @@ class OpenAI(APILLM):
         call_args = self.parse_call_arguments(call_kwargs)
 
         # Start API client
-        client = AsyncOpenAI(api_key=self.api_key)
+        client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base)
         client._platform = PLATFORM
 
         # Call LLM API
