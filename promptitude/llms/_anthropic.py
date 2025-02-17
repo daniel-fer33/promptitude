@@ -323,7 +323,7 @@ class Anthropic(APILLM):
             call_args['stop_sequences'] = [call_args['stop_sequences'], ]
 
         # Start API client
-        client = AsyncAnthropic(api_key=self.api_key)
+        client = AsyncAnthropic(api_key=self.api_key, base_url=self.api_base)
 
         # Call LLM API
         out = await client.messages.create(**call_args)
