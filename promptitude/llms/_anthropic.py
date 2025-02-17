@@ -183,10 +183,18 @@ class Anthropic(APILLM):
             model=model, api_key=api_key, api_type=api_type, **kwargs
         )
 
-        # Tokenizer
+        # Extra arguments
+        self._tokenizer = None  # Will be get on demand
+        self.chat_mode = True  # Only Anthropic chat-mode will be supported
+
+    def _get_tokenizer(self):
         self._tokenizer = anthropic.Client().beta.messages.count_tokens
 
-        self.chat_mode = True  # Only Anthropic chat-mode will be supported
+    @property
+    def tokenizer(self):
+        if self._tokenizer is None:
+            self._get_tokenizer()
+        return self._tokenizer
 
     def session(self, asynchronous=False):
         if asynchronous:
@@ -340,10 +348,10 @@ class Anthropic(APILLM):
 
     def encode(self, string: str, **kwargs) -> List[int]:
         # note that is_fragment is not used for this tokenizer
-        return self._tokenizer.encode(string, allowed_special=self._allowed_special_tokens, **kwargs)
+        return self.tokenizer.encode(string, allowed_special=self._allowed_special_tokens, **kwargs)
 
     def decode(self, tokens: List[int], **kwargs) -> str:
-        return self._tokenizer.decode(tokens, **kwargs)
+        return self.tokenizer.decode(tokens, **kwargs)
 
 
 class AnthropicSession(APILLMSession):
