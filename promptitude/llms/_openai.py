@@ -238,8 +238,19 @@ class OpenAI(APILLM):
             model=model, api_key=api_key, api_type=api_type, **kwargs
         )
 
-        # Tokenizer
+        # Extra arguments
+        self._model_name = model
+        self._encoding_name = encoding_name
+        self._tokenizer = None  # Will be get on demand
+        self._allowed_special_tokens = allowed_special_tokens if allowed_special_tokens is not None \
+            else self.default_allowed_special_tokens
+        self.chat_mode = True  # Only OpenAI chat-mode will be supported
+
+    def _get_tokenizer(self):
         import tiktoken
+        encoding_name = self._encoding_name
+        model = self._model_name
+
         # TODO: Remove.
         # Currently (17/09/2024) tiktoken doesn't support openai "o1" models.
         # https://github.com/openai/tiktoken/issues/337
@@ -247,13 +258,15 @@ class OpenAI(APILLM):
         MODEL_PREFIX_TO_ENCODING.update({"o1": "o200k_base", "chatgpt-4o": "o200k_base"})
         if encoding_name is None:
             encoding_name = tiktoken.encoding_for_model(model).name
+
         self._encoding_name = encoding_name
         self._tokenizer = tiktoken.get_encoding(encoding_name)
-        # Special tokens
-        self._allowed_special_tokens = allowed_special_tokens if allowed_special_tokens is not None \
-            else self.default_allowed_special_tokens
 
-        self.chat_mode = True  # Only OpenAI chat-mode will be supported
+    @property
+    def tokenizer(self):
+        if self._tokenizer is None:
+            self._get_tokenizer()
+        return self._tokenizer
 
     def session(self, asynchronous=False):
         if asynchronous:
@@ -380,7 +393,7 @@ class OpenAI(APILLM):
         call_args = self.parse_call_arguments(call_kwargs)
 
         # Start API client
-        client = AsyncOpenAI(api_key=self.api_key)
+        client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base)
         client._platform = PLATFORM
 
         # Call LLM API
@@ -398,10 +411,10 @@ class OpenAI(APILLM):
 
     def encode(self, string: str, **kwargs) -> List[int]:
         # note that is_fragment is not used used for this tokenizer
-        return self._tokenizer.encode(string, allowed_special=self._allowed_special_tokens, **kwargs)
+        return self.tokenizer.encode(string, allowed_special=self._allowed_special_tokens, **kwargs)
 
     def decode(self, tokens: List[int], **kwargs) -> str:
-        return self._tokenizer.decode(tokens, **kwargs)
+        return self.tokenizer.decode(tokens, **kwargs)
 
 
 class OpenAISession(APILLMSession):

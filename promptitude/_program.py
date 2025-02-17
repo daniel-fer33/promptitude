@@ -387,7 +387,7 @@ class Program:
         """This feels a bit hacky at the moment. TODO: clean this up."""
 
         # add the program execution to the event loop
-        execute_task = loop.create_task(new_program.execute(), neme="Stream Run Execute Program")
+        execute_task = loop.create_task(new_program.execute(), name="Stream Run Execute Program")
         new_program._tasks.append(execute_task)
 
         # run the event loop until the program is done executing
