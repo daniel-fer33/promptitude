@@ -71,3 +71,15 @@ def test_special_var_index():
     assert str(prompt(arr=["there"])) == "there!"
     prompt = guidance("{{#geneach 'out' num_iterations=1}}{{arr[@index]}}{{/each}}!")
     assert str(prompt(arr=["there"])) == "there!"
+
+def test_keywords():
+    prompt = guidance("{{parse is_test}}")
+    assert str(prompt(is_test="TEST")) == "TEST"
+    prompt = guidance("{{parse in_test}}")
+    assert str(prompt(in_test="TEST")) == "TEST"
+    prompt = guidance("{{parse not_test}}")
+    assert str(prompt(not_test="TEST")) == "TEST"
+    prompt = guidance("{{parse and_test}}")
+    assert str(prompt(and_test="TEST")) == "TEST"
+    prompt = guidance("{{parse or_test}}")
+    assert str(prompt(or_test="TEST")) == "TEST"
