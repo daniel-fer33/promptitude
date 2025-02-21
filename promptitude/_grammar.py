@@ -127,12 +127,12 @@ class BinOp(OpNode):
         self.name = "binary_operator"
 
 infix_operator_block = pp.infix_notation(code_chunk_no_infix, [
-    (pp.one_of('- not'), 1, pp.OpAssoc.RIGHT, UnOp),
+    (pp.one_of('-') | pp.Keyword('not'), 1, pp.OpAssoc.RIGHT, UnOp),
     (pp.one_of('* /'), 2, pp.OpAssoc.LEFT, BinOp),
     (pp.one_of('+ -'), 2, pp.OpAssoc.LEFT, BinOp),
-    (pp.one_of('< > <= >= == != is in'), 2, pp.OpAssoc.LEFT, BinOp),
-    (pp.one_of('and'), 2, pp.OpAssoc.LEFT, BinOp),
-    (pp.one_of('or'), 2, pp.OpAssoc.LEFT, BinOp),
+    (pp.one_of('< > <= >= == !=') | pp.Keyword('is') | pp.Keyword('in'), 2, pp.OpAssoc.LEFT, BinOp),
+    (pp.Keyword('and'), 2, pp.OpAssoc.LEFT, BinOp),
+    (pp.Keyword('or'), 2, pp.OpAssoc.LEFT, BinOp),
 ])
 
 
@@ -155,7 +155,7 @@ ws_command_call = pp.Forward().set_name("ws_command_call")
 command_arg_and_ws = pp.Suppress(ws) + command_arg
 ws_command_args = pp.OneOrMore(command_arg_and_ws)
 # note that we have to list out all the operators here because we match before the infix operator checks
-ws_command_call <<= command_name("name") + ~pp.FollowedBy(pp.one_of("+ - * / or not is and <= == >= != < >")) + ws_command_args
+ws_command_call <<= command_name("name") + ~pp.FollowedBy(pp.one_of("+ - * / <= == >= != < >") | pp.Keyword("or") | pp.Keyword("not") | pp.Keyword("is") | pp.Keyword("and")) + ws_command_args
 
 # paren command format {{my_command(arg1, arg2=val)}}
 paren_command_call = pp.Forward().set_name("paren_command_call")
@@ -166,10 +166,10 @@ paren_command_call <<= (command_name("name") + pp.Suppress("(")).leave_whitespac
 # code chunks
 enclosed_code_chunk = pp.Forward().set_name("enclosed_code_chunk")
 paren_group = (pp.Suppress("(") - enclosed_code_chunk + pp.Suppress(")")).set_name("paren_group")
-enclosed_code_chunk_cant_infix = (pp.Group(ws_command_call)("command_call") | pp.Group(paren_command_call)("command_call") | literal | keyword | variable_ref | paren_group) + ~pp.FollowedBy(pp.one_of("+ - * / or not is and <= == >= != < >"))
+enclosed_code_chunk_cant_infix = (pp.Group(ws_command_call)("command_call") | pp.Group(paren_command_call)("command_call") | literal | keyword | variable_ref | paren_group) + ~pp.FollowedBy(pp.one_of("+ - * / <= == >= != < >") | pp.Keyword("or") | pp.Keyword("not") | pp.Keyword("is") | pp.Keyword("and") )
 enclosed_code_chunk <<= enclosed_code_chunk_cant_infix | infix_operator_block
 code_chunk_no_infix <<= (paren_group | pp.Group(paren_command_call)("command_call") | literal | keyword | variable_ref) # used by infix_operator_block
-code_chunk_cant_infix = code_chunk_no_infix + ~pp.FollowedBy(pp.one_of("+ - * / or not is and <= == >= != < >")) # don't match infix operators so we can run this before infix_operator_block
+code_chunk_cant_infix = code_chunk_no_infix + ~pp.FollowedBy(pp.one_of("+ - * / <= == >= != < >") | pp.Keyword("or") | pp.Keyword("not") | pp.Keyword("is") | pp.Keyword("and")) # don't match infix operators so we can run this before infix_operator_block
 code_chunk_cant_infix.set_name("code_chunk_cant_infix")
 code_chunk <<= code_chunk_cant_infix | infix_operator_block
 
