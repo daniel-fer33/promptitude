@@ -436,7 +436,7 @@ class OpenAISession(APILLMSession):
 class _OpenAISession(LLMSession):
     async def __call__(self, prompt, stop=None, stop_regex=None, temperature=None, n=1,
                        max_tokens=1000, max_completion_tokens=1000, logprobs=None,
-                       top_p=1.0, echo=False, logit_bias=None, token_healing=None, pattern=None, stream=None,
+                       top_p=None, echo=False, logit_bias=None, token_healing=None, pattern=None, stream=None,
                        cache_seed=0, caching=None, **completion_kwargs):
         """ Generate a completion of the given prompt.
         """
