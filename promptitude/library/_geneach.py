@@ -16,7 +16,7 @@ async def geneach(
     single_call: bool = False,
     single_call_temperature: float = 0.0,
     single_call_max_tokens: int = 500,
-    single_call_top_p: float = 1.0,
+    single_call_top_p: Union[float, None] = None,
     _parser_context: Optional[Dict[str, Any]] = None,
 ):
     """

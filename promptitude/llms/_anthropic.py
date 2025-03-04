@@ -377,7 +377,7 @@ class AnthropicStreamer(BaseStreamer):
 
 class _AnthropicSession(LLMSession):
     async def __call__(self, prompt, stop=None, stop_regex=None, temperature=None, n=1, max_tokens=1000, logprobs=None,
-                       top_p=1.0, top_k=None, echo=False, logit_bias=None, token_healing=None, pattern=None, stream=None,
+                       top_p=None, top_k=None, echo=False, logit_bias=None, token_healing=None, pattern=None, stream=None,
                        cache_seed=0, caching=None, function_call=None, **completion_kwargs):
         """ Generate a completion of the given prompt.
         """
