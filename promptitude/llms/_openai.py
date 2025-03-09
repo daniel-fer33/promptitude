@@ -378,15 +378,14 @@ class OpenAI(APILLM):
 
         # Special arguments for reasoning models
 
-        # "o1-":
+        # "o1/o3":
         #  - 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
         #  - 'temperature' does not support 0 with this model. Only the default (1) value is supported.
-        #  - 'stop' is not supported with this model.
         #  - 'stream' does not support true with this model. Only the default (false) value is supported.
         if self.is_reasoning_model(model_name):
             call_args.update({
-                # "temperature": 1.0,  # Commented so it will raise an API response error
-                "stream": False
+                "temperature": 1.0,
+                "stream": False  # FIXME: Not implemented
             })
             if 'max_tokens' in call_args:
                 # Will usually have a value by default, so we need to delete it
@@ -434,14 +433,14 @@ class OpenAI(APILLM):
         log.info(f"LLM call response: {out}")
         out = add_text_to_chat_mode(out)
 
-        # "o1-":
+        # "o1/o3":
         # Response will be empty if couldn't complete the request within the 'max_completion_tokens'
         # For now, we'll raise an error if this happens
         model_name = call_args.get('model', self.model_name)
         if self.is_reasoning_model(model_name):
             if out['choices'][0].get('finish_reason', None) == 'length' \
                     and out['choices'][0].get('message', {}).get('content', None) == '':
-                raise Exception(f"Model 'o1-' returned empty response because couldn't "
+                raise Exception(f"Model '{model_name}' returned empty response because couldn't "
                                 f"complete the request within 'max_completion_tokens': "
                                 f"{call_args['max_completion_tokens']}")
 
