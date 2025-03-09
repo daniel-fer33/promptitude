@@ -123,6 +123,10 @@ class APILLM(LLM):
             })
 
     @abstractmethod
+    def is_reasoning_model(self, model_name: str) -> bool:
+        raise NotImplementedError("Subclasses must implement the `is_reasoning_model` method.")
+
+    @abstractmethod
     async def _library_call(self, **kwargs: Any) -> Any:
         """Make an API call using a library (to be implemented by subclasses)."""
         call_args = self.parse_call_arguments(kwargs)

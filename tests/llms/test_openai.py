@@ -132,6 +132,7 @@ def test_models(llm_name):
     out = chat_loop(alt_model=llm_name.split(':')[1])
     assert 'response' in out.variables()
 
+
 class TestOpenAISerialization(unittest.TestCase):
     def test_serialize(self):
         # Create an instance of OpenAI with some parameters
@@ -187,3 +188,40 @@ class TestOpenAISerialization(unittest.TestCase):
         self.assertEqual(new_openai_instance.rest_call, openai_instance.rest_call)
         self.assertEqual(new_openai_instance._allowed_special_tokens, openai_instance._allowed_special_tokens)
         self.assertEqual(new_openai_instance._encoding_name, openai_instance._encoding_name)
+
+
+class TestThinkingModels:
+    def test_o3_mini_thinking(self):
+        llm = get_llm("openai:o3-mini")  # Test will be skipped if key not found
+
+        guide = '''
+        {{#system~}}
+        You are a helpful and terse assistant.
+        {{~/system}}
+
+        {{#user~}}
+        I want a response to the following question:
+        {{query}}
+        Name 3 world-class experts (past or present) who would be great at answering this?
+        Don't answer the question yet.
+        {{~/user}}
+
+        {{#assistant~}}
+        {{gen 'expert_names' max_completion_tokens=1000}}
+        {{~/assistant}}
+
+        {{#user~}}
+        Great, now please answer the question as if these experts had collaborated in writing a joint anonymous answer.
+        {{~/user}}
+
+        {{#assistant~}}
+        {{gen 'answer' max_completion_tokens=5000 reasoning_effort="low"}}
+        {{~/assistant}}
+        '''
+
+        query = 'How can I be more productive?'
+
+        program = guidance(guide, llm=llm, caching=False, silent=True, stream=False, log=True)
+
+        out = program(query=query)
+        assert not out._exception
