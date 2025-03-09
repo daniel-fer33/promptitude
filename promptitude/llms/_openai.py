@@ -1,9 +1,10 @@
-from typing import List, Dict, Optional, Tuple, Type
+from typing import List, Dict, Optional, Tuple, Type, Any
 
 import os
 import copy
 import asyncio
 import types
+import re
 
 import httpx
 import regex
@@ -174,7 +175,8 @@ def extract_function_defs(prompt):
 
 class OpenAI(APILLM):
     llm_name: str = "openai"
-    chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|o1-preview|o1-mini|o1|chatgpt-4o-latest)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
+    chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|o1-preview|o1-mini|o1|o3-mini|chatgpt-4o-latest)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
+    reasoning_model_pattern: str = r'^(o1-|o3-)'
     default_allowed_special_tokens: List[str] = ["<|endoftext|>", "<|endofprompt|>"]
 
     # API
@@ -367,6 +369,37 @@ class OpenAI(APILLM):
 
         cls.cache[key] = list_out
 
+    def is_reasoning_model(self, model_name: str) -> bool:
+        return bool(re.match(self.reasoning_model_pattern, model_name))
+
+    def parse_call_arguments(self, call_args: Dict[str, Any]) -> Dict[str, Any]:
+        call_args = super().parse_call_arguments(call_args)
+        model_name = call_args.get('model', self.model_name)
+
+        # Special arguments for reasoning models
+
+        # "o1-":
+        #  - 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
+        #  - 'temperature' does not support 0 with this model. Only the default (1) value is supported.
+        #  - 'stop' is not supported with this model.
+        #  - 'stream' does not support true with this model. Only the default (false) value is supported.
+        if self.is_reasoning_model(model_name):
+            call_args.update({
+                # "temperature": 1.0,  # Commented so it will raise an API response error
+                "stream": False
+            })
+            if 'max_tokens' in call_args:
+                # Will usually have a value by default, so we need to delete it
+                del call_args['max_tokens']
+            # del call_args['stop']  # Commented so it will raise an API response error
+        else:
+            if 'max_completion_tokens' in call_args:
+                # Will usually have a value by default, so we need to delete it
+                del call_args['max_completion_tokens']
+
+        return call_args
+
+
     async def _library_call(self, **call_kwargs):
         """ Call the OpenAI API using the python package."""
         assert self.api_key is not None, "You must provide an OpenAI API key to use the OpenAI LLM. " \
@@ -400,6 +433,17 @@ class OpenAI(APILLM):
         out = await client.chat.completions.create(**call_args)
         log.info(f"LLM call response: {out}")
         out = add_text_to_chat_mode(out)
+
+        # "o1-":
+        # Response will be empty if couldn't complete the request within the 'max_completion_tokens'
+        # For now, we'll raise an error if this happens
+        model_name = call_args.get('model', self.model_name)
+        if self.is_reasoning_model(model_name):
+            if out['choices'][0].get('finish_reason', None) == 'length' \
+                    and out['choices'][0].get('message', {}).get('content', None) == '':
+                raise Exception(f"Model 'o1-' returned empty response because couldn't "
+                                f"complete the request within 'max_completion_tokens': "
+                                f"{call_args['max_completion_tokens']}")
 
         return out
 
@@ -500,19 +544,6 @@ class _OpenAISession(LLMSession):
                         **completion_kwargs
                     }
 
-                    # "o1-":
-                    #  - 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
-                    #  - 'temperature' does not support 0 with this model. Only the default (1) value is supported.
-                    #  - 'stop' is not supported with this model.
-                    #  - 'stream' does not support true with this model. Only the default (false) value is supported.
-                    if call_args['model'].startswith('o1-'):
-                        call_args.update({
-                            "max_completion_tokens": max_completion_tokens,
-                            "stream": False
-                        })
-                        del call_args['max_tokens']
-                        del call_args['stop']
-
                     if functions is None:
                         if "function_call" in call_args:
                             del call_args["function_call"]
@@ -521,16 +552,6 @@ class _OpenAISession(LLMSession):
                     if logit_bias is not None:
                         call_args["logit_bias"] = {str(k): v for k,v in logit_bias.items()} # convert keys to strings since that's the open ai api's format
                     out = await self.llm.caller(**call_args)
-
-                    # "o1-":
-                    # Response will be empty if couldn't complete the request within the 'max_completion_tokens'
-                    # For now, we'll raise an error if this happens
-                    if call_args['model'].startswith('o1-'):
-                        if out['choices'][0].get('finish_reason', None) == 'length' \
-                                and out['choices'][0].get('message', {}).get('content', None) == '':
-                            raise Exception(f"Model 'o1-' returned empty response because couldn't "
-                                            f"complete the request within 'max_completion_tokens': "
-                                            f"{call_args['max_completion_tokens']}")
 
                 except (openai.RateLimitError,
                         openai.APIConnectionError,
