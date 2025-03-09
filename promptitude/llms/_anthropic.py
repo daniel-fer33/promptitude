@@ -4,6 +4,7 @@ import os
 import copy
 import asyncio
 import types
+import re
 
 import httpx
 import regex
@@ -223,6 +224,17 @@ class Anthropic(APILLM):
         # iterate through the stream
         all_done = False
         async for curr_out in gen:
+            curr_out = curr_out.copy()  # Copy dictionary as it will be mutated
+            # Change schema to match openai's
+            if 'choices' in curr_out:
+                curr_out['choices'] = [
+                    {
+                        'delta': {
+                            'content': c['text']
+                        },
+                        'text': c['text']
+                    } for c in curr_out['choices']
+                ]
 
             # if we have a cached output, extend it with the current output
             if cached_out is not None:
