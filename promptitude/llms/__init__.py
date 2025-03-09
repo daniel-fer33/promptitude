@@ -10,9 +10,9 @@ from . import caches
 
 
 def get_llm_from_model_name(model_name: str) -> LLM:
-    if model_name.startswith('openai/'):
+    if model_name.startswith('openai:'):
         # This indicates the use of OpenAI API schemas and SDK for other models
-        model_name = model_name[len('openai/'):]  # Remove the "openai/" prefix
+        model_name = model_name[len('openai:'):]  # Remove the "openai/" prefix
         return OpenAI(model_name, caching=False)
     if re.match(r"^(gpt-|o1|o3|chatgpt)", model_name):
         return OpenAI(model_name, caching=False)

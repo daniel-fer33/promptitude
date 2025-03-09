@@ -23,6 +23,9 @@ class DummyAPILLM(APILLM):
         self.llm_name = "dummy_api_llm"
         self.api_exceptions = (APIRateLimitException,)
 
+    def is_reasoning_model(self, model_name: str) -> bool:
+        return False
+
     async def _library_call(self, **kwargs):
         # Simulate a response
         return {"choices": [{"text": "This is a library call test response."}]}

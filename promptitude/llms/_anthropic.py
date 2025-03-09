@@ -122,6 +122,7 @@ def merge_stream_chunks(first_chunk, second_chunk):
 
 class Anthropic(APILLM):
     llm_name: str = "anthropic"
+    reasoning_model_pattern: str = r'^(claude-3.7)'
 
     # API
     _api_exclude_arguments: Optional[List[str]] = [
@@ -296,6 +297,9 @@ class Anthropic(APILLM):
             yield out
 
         cls.cache[key] = list_out
+
+    def is_reasoning_model(self, model_name: str) -> bool:
+        return bool(re.match(self.reasoning_model_pattern, model_name))
 
     async def _library_call(self, **call_kwargs):
         """ Call the Anthropic API using the python package."""
