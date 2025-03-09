@@ -139,3 +139,42 @@ class TestAnthropicSerialization(unittest.TestCase):
         self.assertEqual(new_anthropic_instance.api_type, anthropic_instance.api_type)
         self.assertEqual(new_anthropic_instance.api_base, anthropic_instance.api_base)
         self.assertEqual(new_anthropic_instance.api_version, anthropic_instance.api_version)
+
+
+class TestThinkingModels:
+    def test_claude_37_thinking(self):
+        guide = '''
+        {{#system~}}
+        You are a helpful and terse assistant.
+        {{~/system}}
+
+        {{#user~}}
+        I want a response to the following question:
+        {{query}}
+        Name 3 world-class experts (past or present) who would be great at answering this?
+        Don't answer the question yet.
+        {{~/user}}
+
+        {{#assistant~}}
+        {{gen 'expert_names' temperature=0 max_tokens=300}}
+        {{~/assistant}}
+
+        {{#user~}}
+        Great, now please answer the question as if these experts had collaborated in writing a joint anonymous answer.
+        {{~/user}}
+
+        {{#assistant~}}
+        {{gen 'answer' llm_alt_model="claude-3-7-sonnet-20250219" temperature=1 max_tokens=2048 thinking={"type": "enabled", "budget_tokens": 1024} }}
+        {{~/assistant}}
+        '''
+
+        query = 'How can I be more productive?'
+
+        llm = guidance.llms.Anthropic(
+            "claude-3-7-sonnet-20250219"
+        )
+
+        program = guidance(guide, llm=llm, caching=False, silent=True, stream=False, log=True)
+
+        out = program(query=query)
+        assert not out._exception

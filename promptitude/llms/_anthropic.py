@@ -45,7 +45,7 @@ def anthropic_messages_response_to_opeanai_completion_dict(messages_response):
                     tool_calls=None  # TODO: Implement
                 ),
                 logprobs=None
-            ) for i, s1 in enumerate(out['content'])
+            ) for i, s1 in enumerate(out['content']) if s1['type'] == 'text'  # TODO: We are missing thinking block
         ]
 
     # Remove keys

@@ -38,7 +38,7 @@ setup(
         "diskcache",
         "gptcache",
         "openai>=0.1.0",
-        "anthropic>=0.39.0",
+        "anthropic>=0.47.0",
         "pyparsing>=3.0.0",
         "pygtrie",
         "platformdirs",
