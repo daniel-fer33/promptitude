@@ -143,6 +143,8 @@ class TestAnthropicSerialization(unittest.TestCase):
 
 class TestThinkingModels:
     def test_claude_37_thinking(self):
+        llm = get_llm("anthropic:claude-3-7-sonnet-20250219")  # Test will be skipped if key not found
+
         guide = '''
         {{#system~}}
         You are a helpful and terse assistant.
@@ -169,10 +171,6 @@ class TestThinkingModels:
         '''
 
         query = 'How can I be more productive?'
-
-        llm = guidance.llms.Anthropic(
-            "claude-3-7-sonnet-20250219"
-        )
 
         program = guidance(guide, llm=llm, caching=False, silent=True, stream=False, log=True)
 

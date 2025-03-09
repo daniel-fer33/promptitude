@@ -192,6 +192,8 @@ class TestOpenAISerialization(unittest.TestCase):
 
 class TestThinkingModels:
     def test_o3_mini_thinking(self):
+        llm = get_llm("openai:o3-mini")  # Test will be skipped if key not found
+
         guide = '''
         {{#system~}}
         You are a helpful and terse assistant.
@@ -218,10 +220,6 @@ class TestThinkingModels:
         '''
 
         query = 'How can I be more productive?'
-
-        llm = guidance.llms.OpenAI(
-            "o3-mini"
-        )
 
         program = guidance(guide, llm=llm, caching=False, silent=True, stream=False, log=True)
 
