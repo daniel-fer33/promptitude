@@ -1,5 +1,6 @@
 import unittest
 import importlib
+import random
 
 from promptitude import guidance
 from promptitude.llms import Anthropic
@@ -176,3 +177,44 @@ class TestThinkingModels:
 
         out = program(query=query)
         assert not out._exception
+
+
+class TestCache:
+    def test_cache(self):
+        llm = get_llm("anthropic:claude-3-5-haiku-20241022")  # Test will be skipped if key not found
+        llm.cache_version = random.randint(0, 1e16)
+
+        caching = True
+        silent = False
+        stream = False  # True is not implemented
+
+        guide = '''
+        {{#system~}}
+        You are a helpful and terse assistant.
+        {{~/system}}
+
+        {{#user~}}
+        I want a response to the following question:
+        {{query}}
+        Name 3 world-class experts (past or present) who would be great at answering this?
+        Don't answer the question yet.
+        {{~/user}}
+
+        {{#assistant~}}
+        {{gen 'tmp' temperature=0 max_tokens=300}}
+        {{~/assistant}}
+        '''
+
+        query = 'How can I be more productive?'
+
+        program = guidance(guide, llm=llm, caching=caching, silent=silent, stream=stream, log=True)
+
+        out = program(query=query)
+        resutl1 = out['tmp']
+
+        program = guidance(guide, llm=llm, caching=caching, silent=silent, stream=stream, log=True)
+
+        out = program(query=query)
+        resutl2 = out['tmp']
+
+        assert resutl1==resutl2
