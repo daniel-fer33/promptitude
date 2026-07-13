@@ -7,6 +7,7 @@ import uuid
 import logging
 import copy
 import asyncio
+import concurrent.futures
 import pathlib
 import os
 import time
@@ -356,26 +357,59 @@ class Program:
 
         # if we are not in async mode, we need to create a new event loop and run the program in it until it is done
         else:
-            # apply nested event loop patch if needed
-            try:
-                other_loop = asyncio.get_event_loop()
-                nest_asyncio.apply(other_loop)
-            except RuntimeError:
-                pass
-            
-            loop = asyncio.new_event_loop()
-            update_task = loop.create_task(new_program.update_display.run(), name="Update Display (not async_mode)")  # start the display updater
-            new_program._tasks.append(update_task)
             if new_program.stream:
+                # Streaming needs to hand the loop back to the caller, so it
+                # cannot be driven from a worker thread. Fall back to the
+                # historical nest_asyncio behavior for this (rare) path.
+                try:
+                    other_loop = asyncio.get_event_loop()
+                    nest_asyncio.apply(other_loop)
+                except RuntimeError:
+                    pass
+                loop = asyncio.new_event_loop()
+                update_task = loop.create_task(new_program.update_display.run(), name="Update Display (not async_mode)")  # start the display updater
+                new_program._tasks.append(update_task)
                 return self._stream_run(loop, new_program)
-            else:
-                loop.run_until_complete(new_program.execute())
 
-                # Close the event loop
-                for task in new_program._tasks:
-                    task.cancel()
-                loop.run_until_complete(asyncio.sleep(0))
-                loop.close()
+            # Run the program on its own new event loop. When we are already
+            # inside a running loop (e.g. a guidance command that itself invokes
+            # another guidance program synchronously), that loop cannot host a
+            # nested run_until_complete, and nest_asyncio.apply() is not a safe
+            # workaround: it globally swaps asyncio.Task for the pure-Python
+            # implementation, and on Python 3.14 that breaks the C-level
+            # current_task() tracking (it starts returning None), corrupting
+            # sniffio/anyio async detection for any later code in the process.
+            # Instead, drive the new loop on a dedicated worker thread whenever a
+            # loop is already running; a separate thread has no running loop of
+            # its own, so run_until_complete works and asyncio's global state is
+            # left untouched.
+            def _run_on_new_loop():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    update_task = loop.create_task(new_program.update_display.run(), name="Update Display (not async_mode)")  # start the display updater
+                    new_program._tasks.append(update_task)
+                    loop.run_until_complete(new_program.execute())
+
+                    # Close the event loop
+                    for task in new_program._tasks:
+                        task.cancel()
+                    loop.run_until_complete(asyncio.sleep(0))
+                finally:
+                    loop.close()
+                    asyncio.set_event_loop(None)
+
+            try:
+                asyncio.get_running_loop()
+                loop_already_running = True
+            except RuntimeError:
+                loop_already_running = False
+
+            if loop_already_running:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    executor.submit(_run_on_new_loop).result()
+            else:
+                _run_on_new_loop()
 
         return new_program
     
