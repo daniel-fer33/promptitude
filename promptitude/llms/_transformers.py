@@ -275,7 +275,10 @@ class TransformersSession(LLMSession):
 
             # trim the cache to what we can use
             if prefix_match_len < len(self._prefix_cache): # prefix_match_len > 0 and 
-                self._past_key_values = tuple((key[:,:,:prefix_match_len,:],value[:,:,:prefix_match_len,:]) for key,value in self._past_key_values) # TODO: this is specific to the GPT2 tensor layout
+                if hasattr(self._past_key_values, "crop"): # newer transformers versions return a Cache object
+                    self._past_key_values.crop(prefix_match_len)
+                else:
+                    self._past_key_values = tuple((key[:,:,:prefix_match_len,:],value[:,:,:prefix_match_len,:]) for key,value in self._past_key_values) # TODO: this is specific to the GPT2 tensor layout
                 self._prefix_cache = self._prefix_cache[:prefix_match_len]
 
             # add support for pattern guidance
@@ -337,8 +340,12 @@ class TransformersSession(LLMSession):
     
     def _update_prefix_cache(self, streamer):
         # note what we now have cached and ready for our next call in this session
-        if self._past_key_values and len(streamer.generated_sequence) == 1:
-            self._prefix_cache = streamer.generated_sequence[0][:self._past_key_values[0][0].shape[-2]] # self._past_key_values is already saved, this just aligns with it
+        if self._past_key_values is not None and len(streamer.generated_sequence) == 1:
+            if hasattr(self._past_key_values, "get_seq_length"): # newer transformers versions return a Cache object
+                cache_len = self._past_key_values.get_seq_length()
+            else:
+                cache_len = self._past_key_values[0][0].shape[-2]
+            self._prefix_cache = streamer.generated_sequence[0][:cache_len] # self._past_key_values is already saved, this just aligns with it
 
     def _stream_then_save(self, streamer, key, thread):
         list_out = []
