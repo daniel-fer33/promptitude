@@ -175,8 +175,9 @@ def extract_function_defs(prompt):
 
 class OpenAI(APILLM):
     llm_name: str = "openai"
-    chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|o1-preview|o1-mini|o1|o3-mini|chatgpt-4o-latest)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
-    reasoning_model_pattern: str = r'^(o1-|o3-)'
+    chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|gpt-5\.6-luna|gpt-5\.6-terra|gpt-5\.6-sol|o1-preview|o1-mini|o1|o3-mini|chatgpt-4o-latest)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
+    reasoning_model_pattern: str = r'^(o1|o3|gpt-5)'
+    no_stop_model_pattern: str = r'^gpt-5'
     default_allowed_special_tokens: List[str] = ["<|endoftext|>", "<|endofprompt|>"]
 
     # API
@@ -257,7 +258,7 @@ class OpenAI(APILLM):
         # Currently (17/09/2024) tiktoken doesn't support openai "o1" models.
         # https://github.com/openai/tiktoken/issues/337
         from tiktoken.model import MODEL_PREFIX_TO_ENCODING, MODEL_TO_ENCODING
-        MODEL_PREFIX_TO_ENCODING.update({"o1": "o200k_base", "chatgpt-4o": "o200k_base"})
+        MODEL_PREFIX_TO_ENCODING.update({"o1": "o200k_base", "chatgpt-4o": "o200k_base", "gpt-5": "o200k_base"})
         if encoding_name is None:
             encoding_name = tiktoken.encoding_for_model(model).name
 
@@ -378,7 +379,7 @@ class OpenAI(APILLM):
 
         # Special arguments for reasoning models
 
-        # "o1/o3":
+        # "o1/o3/gpt-5":
         #  - 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
         #  - 'temperature' does not support 0 with this model. Only the default (1) value is supported.
         #  - 'stream' does not support true with this model. Only the default (false) value is supported.
@@ -423,6 +424,13 @@ class OpenAI(APILLM):
 
         # Parse call arguments
         call_args = self.parse_call_arguments(call_kwargs)
+        model_name = call_args.get('model', self.model_name)
+
+        # "gpt-5":
+        #  - 'stop' is not supported with this model. We apply it to the response instead.
+        stop = None
+        if re.match(self.no_stop_model_pattern, model_name):
+            stop = call_args.pop('stop', None)
 
         # Start API client
         client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base)
@@ -432,11 +440,17 @@ class OpenAI(APILLM):
         out = await client.chat.completions.create(**call_args)
         log.info(f"LLM call response: {out}")
         out = add_text_to_chat_mode(out)
+        if stop is not None:
+            stops = [stop] if isinstance(stop, str) else stop
+            for c in out['choices']:
+                positions = [c['text'].find(s) for s in stops if c['text'] and s in c['text']]
+                if positions:
+                    c['text'] = c['text'][:min(positions)]
+                    c['finish_reason'] = 'stop'
 
-        # "o1/o3":
+        # "o1/o3/gpt-5":
         # Response will be empty if couldn't complete the request within the 'max_completion_tokens'
         # For now, we'll raise an error if this happens
-        model_name = call_args.get('model', self.model_name)
         if self.is_reasoning_model(model_name):
             if out['choices'][0].get('finish_reason', None) == 'length' \
                     and out['choices'][0].get('message', {}).get('content', None) == '':
@@ -454,7 +468,7 @@ class OpenAI(APILLM):
 
     def encode(self, string: str, **kwargs) -> List[int]:
         # note that is_fragment is not used used for this tokenizer
-        return self.tokenizer.encode(string, allowed_special=self._allowed_special_tokens, **kwargs)
+        return self.tokenizer.encode(string, allowed_special=set(self._allowed_special_tokens), **kwargs)
 
     def decode(self, tokens: List[int], **kwargs) -> str:
         return self.tokenizer.decode(tokens, **kwargs)
