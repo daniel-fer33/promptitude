@@ -46,6 +46,7 @@ setup(
         "nest_asyncio",
         "msal",
         "requests",
+        "httpx",
         "numpy",
         "aiohttp",
     ],

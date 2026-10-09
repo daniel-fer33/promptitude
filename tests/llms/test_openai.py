@@ -33,7 +33,13 @@ def test_chat_model_pattern():
         'o1-mini',
         'o1-mini-2024-09-12',
         'o1',
-        'chatgpt-4o-latest'
+        'chatgpt-4o-latest',
+        'gpt-5.6-luna',
+        'gpt-5.6-terra',
+        'gpt-5.6-sol',
+        'gpt-6',
+        'gpt-6-mini',
+        'gpt-6.1-luna'
     ]
 
     chat_model_pattern = guidance.llms.OpenAI.chat_model_pattern
