@@ -175,9 +175,9 @@ def extract_function_defs(prompt):
 
 class OpenAI(APILLM):
     llm_name: str = "openai"
-    chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|gpt-5\.6-luna|gpt-5\.6-terra|gpt-5\.6-sol|o1-preview|o1-mini|o1|o3-mini|chatgpt-4o-latest)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
-    reasoning_model_pattern: str = r'^(o1|o3|gpt-5)'
-    no_stop_model_pattern: str = r'^gpt-5'
+    chat_model_pattern: str = r'^(gpt-3\.5-turbo|gpt-4|gpt-4-vision|gpt-4-turbo|gpt-4o|gpt-4o-mini|gpt-5\.6-luna|gpt-5\.6-terra|gpt-5\.6-sol|gpt-6(\.\d+)?(-[a-z]+)?|o1-preview|o1-mini|o1|o3-mini|chatgpt-4o-latest)(-\d+k)?(-\d{4})?(-vision)?(-instruct)?(-\d{2})?(-\d{2})?(-preview)?$'
+    reasoning_model_pattern: str = r'^(o1|o3|gpt-5|gpt-6)'
+    no_stop_model_pattern: str = r'^gpt-(5|6)'
     default_allowed_special_tokens: List[str] = ["<|endoftext|>", "<|endofprompt|>"]
 
     # API
@@ -258,7 +258,7 @@ class OpenAI(APILLM):
         # Currently (17/09/2024) tiktoken doesn't support openai "o1" models.
         # https://github.com/openai/tiktoken/issues/337
         from tiktoken.model import MODEL_PREFIX_TO_ENCODING, MODEL_TO_ENCODING
-        MODEL_PREFIX_TO_ENCODING.update({"o1": "o200k_base", "chatgpt-4o": "o200k_base", "gpt-5": "o200k_base"})
+        MODEL_PREFIX_TO_ENCODING.update({"o1": "o200k_base", "chatgpt-4o": "o200k_base", "gpt-5": "o200k_base", "gpt-6": "o200k_base"})
         if encoding_name is None:
             encoding_name = tiktoken.encoding_for_model(model).name
 
@@ -379,7 +379,7 @@ class OpenAI(APILLM):
 
         # Special arguments for reasoning models
 
-        # "o1/o3/gpt-5":
+        # "o1/o3/gpt-5/gpt-6":
         #  - 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
         #  - 'temperature' does not support 0 with this model. Only the default (1) value is supported.
         #  - 'stream' does not support true with this model. Only the default (false) value is supported.
@@ -426,7 +426,7 @@ class OpenAI(APILLM):
         call_args = self.parse_call_arguments(call_kwargs)
         model_name = call_args.get('model', self.model_name)
 
-        # "gpt-5":
+        # "gpt-5/gpt-6":
         #  - 'stop' is not supported with this model. We apply it to the response instead.
         stop = None
         if re.match(self.no_stop_model_pattern, model_name):
@@ -448,7 +448,7 @@ class OpenAI(APILLM):
                     c['text'] = c['text'][:min(positions)]
                     c['finish_reason'] = 'stop'
 
-        # "o1/o3/gpt-5":
+        # "o1/o3/gpt-5/gpt-6":
         # Response will be empty if couldn't complete the request within the 'max_completion_tokens'
         # For now, we'll raise an error if this happens
         if self.is_reasoning_model(model_name):
